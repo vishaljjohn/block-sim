@@ -144,9 +144,11 @@ export function parseKeyLines(lines: KeyLine[], opts: ParseOptions = {}): Parsed
       }
     }
   }
-  if (best.entries.length >= 2 || (best.entries.length === 1 && best.entries[0].answer)) return best;
+  // keys with no question numbers ("Correct Answer: C." on each page): read the answers in order. Used when that
+  // finds clearly more answers than reading by number (stray numbers in lab tables can fool the numbered reader).
   const loose = parseLoose(lines);
-  if (loose.entries.length > best.entries.length) return { ...loose, tags: best.tags };
+  const a = answered(best);
+  if ((a < Math.max(3, answered(loose) * 0.3) && answered(loose) > a) || (a === 0 && loose.entries.length > best.entries.length)) return { ...loose, tags: best.tags };
   return best.entries.length ? best : { entries: [], tags: best.tags, format: 'none' };
 }
 
@@ -328,12 +330,22 @@ function parseLoose(lines: KeyLine[]): ParsedKey {
   const flush = () => {
     if (cur) cur.e.explanation = joinParagraphs(cur.buf);
   };
+  // pages that hold an answer line: reaching one of them ends the previous explanation (it is the next question)
+  const answerPages = new Set(lines.filter((l, i) => l.page != null && ANSWER_RE.test(texts[i])).map((l) => l.page));
+  let curPage: number | undefined;
   lines.forEach((l, i) => {
     const text = texts[i];
     const a = ANSWER_RE.exec(text);
+    if (l.page != null && l.page !== curPage) {
+      if (cur && curPage != null && answerPages.has(l.page) && !(a && isLetterOk(a[1], a[2]))) {
+        flush();
+        cur = null;
+      }
+      curPage = l.page;
+    }
     if (a && isLetterOk(a[1], a[2])) {
       flush();
-      const e: KeyEntry = { n: answers.length + 1, answer: a[1].toUpperCase(), explanation: '', conf: l.conf ?? 1 };
+      const e: KeyEntry = { n: answers.length + 1, answer: a[1].toUpperCase(), explanation: '', conf: l.conf ?? 1, ...(l.page != null ? { page: l.page } : {}) };
       answers.push(e);
       cur = { e, buf: a[2] ? [a[2]] : [] };
     } else if (cur) {

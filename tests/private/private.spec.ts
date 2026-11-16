@@ -98,7 +98,7 @@ for (const p of pairs()) {
       const dump = await page.evaluate(async (want: number[]) => {
         const db: IDBDatabase = await new Promise((res) => { const r = indexedDB.open('blocksim'); r.onsuccess = () => res(r.result); });
         const all: any[] = await new Promise((res) => { const r = db.transaction('pages').objectStore('pages').getAll(); r.onsuccess = () => res(r.result); });
-        return all.filter((x) => want.includes(x.page) && x.examId !== 'demo-exam').map((x) => ({ page: x.page, words: x.words.slice(0, 60).map((w: any) => `${w.t}@${w.x.toFixed(2)},${w.y.toFixed(2)}`) }));
+        return all.filter((x) => want.includes(x.page) && x.examId !== 'demo-exam').map((x) => ({ page: x.page, words: x.words, autoCrop: x.autoCrop }));
       }, process.env.DUMP.split(',').map(Number));
       fs.writeFileSync(path.join(OUT, `${p.id}-dump.json`), JSON.stringify(dump, null, 1));
     }

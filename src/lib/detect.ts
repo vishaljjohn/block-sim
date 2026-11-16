@@ -11,7 +11,8 @@ import { buildLines, type Line } from './textLines';
 export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** Optional radio-button glyph that OCR reads in front of a choice letter. */
-const RADIO = '(?:[O0o©®○◯●◉◎@¤]\\s*|[(\\[]\\s*[)\\]]\\s*)?';
+// radio glyph read by OCR in front of the label: "O", "Q", "©", "(®", "©)", "(O" (glued: "(OE)"), "()", "[]"
+const RADIO = '(?:[^\\w\\s]{0,2}[O0oQ©®○◯●◉◎@¤][^\\w\\s]{0,2}\\s*(?=\\(?[A-Za-z][.)])|[^\\w\\s]{1,3}\\s*|[(\\[]\\s*[)\\]]\\s*)?';
 const CHOICE_RE = new RegExp(`^${RADIO}(?:\\(([A-Za-z])\\)|([A-Za-z])\\s?[.):])(?:\\s+|$)(.*)$`);
 const START_RES = [/^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\s*#?\s*)?(\d{1,3})\s*[.):]\s*(\S.*)?$/i, /^Question\s*#?\s*(\d{1,3})\b(.*)$/i, /^Q\s*(\d{1,3})\b(.*)$/];
 
@@ -92,7 +93,7 @@ export interface ChoiceDetection {
  */
 function splitChoiceColumns(lines: Line[], words: Word[]): Line[] {
   const label = /^(?:\(?[A-Za-z]\)|[A-Za-z][.)])$/;
-  const radio = /^[O0o©®○◯●◉◎@¤]$/;
+  const radio = /^[O0oQ©®○◯●◉◎@¤]$/;
   const out: Line[] = [];
   for (const l of lines) {
     if (!matchChoiceLabel(l.text) || l.idx.length < 4) {
@@ -139,7 +140,14 @@ export function detectChoices(lines: Line[], page: number, region: Rect | null =
       const want = LETTERS[run.length];
       if (c.m!.letter !== want) {
         if (c.m!.letter === 'A') break;
-        continue; // a stray line (e.g. continuation) that happens to look like a label
+        // one label unreadable (OCR): a line between, aligned with the other labels, is that choice
+        if (c.m!.letter === LETTERS[run.length + 1]) {
+          const colFirst0 = run.find((r) => r.l.column === c.l.column);
+          const gap = ls.slice(prev.i + 1, c.i).find((l) => l.column === c.l.column && colFirst0 && Math.abs(l.x - colFirst0.l.x) < 0.03);
+          if (gap) {
+            run.push({ i: ls.indexOf(gap), l: gap, m: { letter: want, rest: gap.text.replace(/^\S{1,4}\s+/, '') }, inferred: true } as (typeof cands)[number]);
+          } else continue;
+        } else continue; // a stray line (e.g. continuation) that happens to look like a label
       }
       const sameCol = c.l.column === prev.l.column;
       // labels line up with the first label in the same column
@@ -178,7 +186,7 @@ export function detectChoices(lines: Line[], page: number, region: Rect | null =
     const reg: ChoiceRegion = { letter: c.m!.letter, page, x: labelX - 0.004, y: top, w: right - labelX + 0.012, h: bottom - top };
     // the page's own radio circle (OCR reads it as "O", "©", …): our selection is drawn on top of it
     const first = words && c.l.idx.length > 1 ? words[c.l.idx[0]] : undefined;
-    if (first && /^[O0o©®○◯●◉◎@¤]$/.test(first.t) && first.w < lineH * 2.2) {
+    if (first && /^[O0oQ©®○◯●◉◎@¤]$/.test(first.t) && first.w < lineH * 2.2) {
       const size = Math.max(first.w, first.h * 0.8);
       reg.radio = { x: first.x + first.w / 2 - size / 2, y: first.y + first.h / 2 - size / 2, w: size, h: size };
       reg.x = Math.min(reg.x, first.x - 0.004);
@@ -198,11 +206,13 @@ export function detectChoices(lines: Line[], page: number, region: Rect | null =
       b.y = mid;
     }
   }
-  const conf = Math.min(...best.map((c) => c.l.conf));
+  // OCR confidence of the label lines (mean, so one smudged line does not sink a clean set)
+  const conf = best.reduce((sum, c) => sum + c.l.conf, 0) / best.length;
   let confidence = best.length >= 3 ? 0.95 : 0.75;
-  if (conf < 0.6) confidence -= 0.25;
-  else if (conf < 0.8) confidence -= 0.1;
-  if (texts.some((t) => !t.text)) confidence -= 0.2;
+  if (conf < 0.5) confidence -= 0.25;
+  else if (conf < 0.7) confidence -= 0.1;
+  confidence -= Math.min(0.3, 0.1 * texts.filter((t) => !t.text).length);
+  confidence -= 0.1 * best.filter((c) => (c as { inferred?: boolean }).inferred).length;
   return { choices, texts, confidence: Math.max(0, confidence) };
 }
 

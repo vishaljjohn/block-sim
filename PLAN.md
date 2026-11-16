@@ -1,26 +1,24 @@
 # Block Sim: plan and status
 
-## STOPPED HERE (usage limit reached, 2026-11-16)
+## STATUS (usage limit reached, 2026-11-16 ~12:00)
 
-Nothing is committed, pushed or deployed yet. No GitHub repo exists yet.
-`.gitignore` already excludes `/private-test`, all `*.pdf`, and generated assets.
+Live: stable https://www.vishaljohn.com/block-sim/ · beta https://www.vishaljohn.com/block-sim/beta/
+(beta deploy was blocked by the Pages environment until it was allowed; the next CI run publishes it).
 
-State of the code:
-- `npx vitest run`: 45 unit tests pass (key parser, timer/sleep, spaced schedule, merge, highlights, migrations, score, missed bank).
-- `npx tsc --noEmit`: clean.
-- `npx eslint src tests scripts --max-warnings 0`: 1 error + 6 warnings left
-  - `src/lib/keyParser.ts:383` unused initial assignment (`let score = 0` → declare without value)
-  - remove the unused `eslint-disable` line in the 6 placeholder pages
-- `npm run build` has NOT been run yet. The app has never been opened in a browser.
+Done: Stages A–E built, committed, pushed (main + beta). Unit tests (79) and e2e (Chromium/WebKit/iPad) pass.
+Last commit adds private-PDF fixes; the newest local edits (radio "Q", mangled radio glyphs, one missing
+label, mean OCR confidence, in-order key reading) are committed by the final step below.
 
-### Next steps, in order
-1. Fix the lint items above, run `npm run build`, open the app with `npm run dev`, fix whatever breaks.
-2. Compare the test screen with `/reference/NBME Reference` and `/reference/Qbankly Reference` screenshots; adjust.
-3. Write `scripts/make-fixtures.mjs` (test PDFs a–d) and Playwright e2e for Stage A.
-4. Write CLAUDE.md, DECISIONS.md, README.md, `.github/workflows/deploy.yml`
-   (build main → `dist/`, beta → `dist/beta/`, one Pages artifact).
-5. First commit, `gh repo create block-sim --public`, enable Pages, deploy Stage A, run e2e on live URL.
-6. Stages B–E below.
+In progress: `npm run private-test` running in the background → /private-results/*.json (local only, ignored).
+Results so far: text-layer exams 49–50/50 answers + choices; scanned exams 30–50/50 choices.
+
+Next steps, in order
+1. When the private run ends: `npm run build`, rerun failed/weak IDs with `ONLY=… REDO=1 npm run private-test`
+   (1-6 highlight key 34/50; 1-9, 1-10, 6-1 keys; 1-1/1-2 scanned choices), summarize numbers.
+2. Full checks: `npm run lint && npm test && npm run build:all && npx playwright test`.
+3. Fresh subagent: first-time student following README on the beta URL; fix everything it reports.
+4. Tag `v1.0.0` on main, push tags; final report (URLs, private numbers, 5-line checklist, known
+   problems, classmate text, HTML card).
 
 ## Decisions made so far (move to DECISIONS.md)
 - Test screen follows the reference screenshots: "Question Status" striped strip on the left; navy top bar with

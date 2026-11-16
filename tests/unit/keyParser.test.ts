@@ -192,3 +192,19 @@ describe('applying a key to questions', () => {
     expect(applyKey(qs, parseKeyText('51. A\n52. B\n53. C')).map((q) => q.answer)).toEqual(['A', 'B', 'C']);
   });
 });
+
+describe('keys without question numbers', () => {
+  it('one "Correct Answer:" per page, stray numbers in lab tables, explanation stops at the next page', () => {
+    const page = (p: number, ans: string, extra: string[] = []) => [
+      { text: 'A man has a cough for days.', page: p, top: true },
+      ...extra.map((t) => ({ text: t, page: p })),
+      { text: 'A. One', page: p },
+      { text: 'B. Two', page: p },
+      { text: `Correct Answer: ${ans}.`, page: p },
+      { text: `Explanation for page ${p}.`, page: p },
+    ];
+    const k = parseKeyLines([...page(1, 'B', ['1. Sodium 140']), ...page(2, 'A', ['2. Potassium 4']), ...page(3, 'B'), ...page(4, 'A')]);
+    expect(k.entries.map((e) => e.answer)).toEqual(['B', 'A', 'B', 'A']);
+    expect(k.entries[0].explanation).toBe('Explanation for page 1.');
+  });
+});
