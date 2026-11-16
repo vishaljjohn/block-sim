@@ -7,13 +7,14 @@
     "prepare-assets": "node scripts/prepare-assets.mjs",
     "dev": "npm run prepare-assets && vite",
     "build": "npm run prepare-assets && tsc --noEmit && vite build",
-    "build:beta": "npm run prepare-assets && tsc --noEmit && VITE_CHANNEL=beta vite build",
+    "build:beta": "VITE_CHANNEL=beta npm run prepare-assets && tsc --noEmit && VITE_CHANNEL=beta vite build",
     "preview": "vite preview",
     "lint": "eslint src tests scripts --max-warnings 0",
     "test": "vitest run",
     "fixtures": "node scripts/make-fixtures.mjs",
     "e2e": "playwright test",
-    "private-test": "playwright test --config playwright.private.config.ts"
+    "private-test": "playwright test --config playwright.private.config.ts",
+    "build:all": "npm run build:beta && npm run build && rm -rf dist/beta && cp -R dist-beta dist/beta"
   },
   "dependencies": {
     "dexie": "^4.4.7",

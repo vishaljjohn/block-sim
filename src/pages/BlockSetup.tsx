@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DEFAULT_SEC_PER_Q } from '../config';
+import { DEFAULT_SEC_PER_Q, STORAGE_PREFIX } from '../config';
 import { db } from '../db';
 import type { Exam, Mode } from '../types';
 import { createAttempt, planBlocks, shuffle, type Pick } from '../lib/attempt';
@@ -11,7 +11,7 @@ import { H1, H2 } from '../ui/Shell';
 
 type Sel = 'all' | 'range' | 'random' | 'missed' | 'marked' | 'tag';
 type Preset = 'standard' | 'shelf' | 'custom';
-export const BANK_KEY = 'blocksim-bank-qids';
+export const BANK_KEY = STORAGE_PREFIX + 'bank-qids';
 
 export function BlockSetup({ examId, preset: pick, bank }: { examId: string | null; preset: string | null; bank: boolean }) {
   const exams = useLive(() => db.exams.toArray(), []);
