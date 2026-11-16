@@ -102,3 +102,38 @@ test('a picture in the question can be popped out and zoomed', async ({ page }) 
   await expect(page.getByTestId('choice-A')).toBeVisible();
   await expect(page.getByTestId('zoom-image')).toHaveCount(0);
 });
+
+test('a 200-page PDF opens in a block in under 3 seconds and question switches are quick', async ({ page }, info) => {
+  test.skip(info.project.name !== 'chromium', 'timing measured once');
+  await freshStart(page);
+  await importExam(page, { file: 'f-200-pages.pdf', name: '200 pages', key: { paste: answers.f.join(' ') }, layout: 'fixed', perQuestion: 1 });
+  await confirmKey(page);
+  await page.getByTestId('detail-new-attempt').click();
+  await page.getByTestId('mode-untimed').check();
+  const t0 = Date.now();
+  await page.getByTestId('start-block').click();
+  await expect(page.locator('[data-drawn="1"]').first()).toBeVisible();
+  const open = Date.now() - t0;
+  expect(open).toBeLessThan(3000);
+  const t1 = Date.now();
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('item-n')).toHaveText('6');
+  await expect(page.locator('[data-drawn="1"]').first()).toBeVisible();
+  expect((Date.now() - t1) / 5).toBeLessThan(600);
+  console.log(`200-page PDF: block open ${open} ms`);
+});
+
+test('nothing is ever requested from another site (OCR, PDF engine, fonts all local)', async ({ page }, info) => {
+  test.skip(info.project.name !== 'chromium', 'checked once');
+  const outside: string[] = [];
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (!['localhost', '127.0.0.1', 'www.vishaljohn.com'].includes(u.hostname) && !u.protocol.startsWith('blob') && !u.protocol.startsWith('data')) outside.push(r.url());
+  });
+  await freshStart(page);
+  await importExam(page, { file: 'a-image-questions.pdf', name: 'Local only', key: { pdf: 'a-key.pdf' }, layout: 'auto' });
+  await confirmKey(page);
+  await startBlock(page, { mode: 'exam' });
+  await page.getByTestId('btn-labs').click();
+  expect(outside).toEqual([]);
+});

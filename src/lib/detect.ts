@@ -12,15 +12,16 @@ export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** Optional radio-button glyph that OCR reads in front of a choice letter. */
 // radio glyph read by OCR in front of the label: "O", "Q", "©", "(®", "©)", "(O" (glued: "(OE)"), "()", "[]"
-const RADIO = '(?:[^\\w\\s]{0,2}[O0oQ©®○◯●◉◎@¤][^\\w\\s]{0,2}\\s*(?=\\(?[A-Za-z][.)])|[^\\w\\s]{1,3}\\s*|[(\\[]\\s*[)\\]]\\s*)?';
-const CHOICE_RE = new RegExp(`^${RADIO}(?:\\(([A-Za-z])\\)|([A-Za-z])\\s?[.):])(?:\\s+|$)(.*)$`);
+const RADIO = '(?:[^\\w\\s]{0,2}[O0oQ©®○◯●◉◎@¤][^\\w\\s]{0,2}\\s*(?=\\(?[A-Za-z][.)])|[CDGU](?=[A-Z][.)]\\s)|[^\\w\\s]{1,3}\\s*|[(\\[]\\s*[)\\]]\\s*)?';
+// OCR sometimes reads the period after the letter as a comma ("A, Aspirin")
+const CHOICE_RE = new RegExp(`^${RADIO}(?:\\(([A-Za-z])\\)|([A-Za-z])\\s?[.):]|([A-Z]),(?=\\s))(?:\\s+|$)(.*)$`);
 const START_RES = [/^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\s*#?\s*)?(\d{1,3})\s*[.):]\s*(\S.*)?$/i, /^Question\s*#?\s*(\d{1,3})\b(.*)$/i, /^Q\s*(\d{1,3})\b(.*)$/];
 
 export function matchChoiceLabel(text: string): { letter: string; rest: string } | null {
   const m = CHOICE_RE.exec(text.trim());
   if (!m) return null;
-  const letter = (m[1] ?? m[2]).toUpperCase();
-  return { letter, rest: (m[3] ?? '').trim() };
+  const letter = (m[1] ?? m[2] ?? m[3]).toUpperCase();
+  return { letter, rest: (m[4] ?? '').trim() };
 }
 
 export function matchQuestionStart(text: string): number | null {

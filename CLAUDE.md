@@ -7,7 +7,7 @@
   original made-up questions (`scripts/demo-content.mjs`, `scripts/make-fixtures.mjs`).
 - **Never commit `/private-test`** (or any `*.pdf`). It is in `.gitignore`; check `git status` before every commit.
   Never quote its content in code, docs, commit messages or reports.
-- No NBME/USMLE names, logos or trademarks in UI, code or docs: say "board-style".
+- No exam-publisher or licensing-exam names, logos or trademarks in UI, code or docs: say "board-style".
 - No feature for sharing exams or question content between users.
 - Run before every commit: `npm run lint && npm test && npm run build && npm run e2e` (all must be green).
 - Ship to **beta first** (`beta` branch → `/block-sim/beta/`). Merge to `main` only when the owner says

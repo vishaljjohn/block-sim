@@ -286,10 +286,32 @@ async function fixtureE(qs) {
   fs.writeFileSync(path.join(out, 'e-highlight-key.pdf'), await k.doc.save());
 }
 
+// ---------- f) a 200-page text PDF (speed test) ----------
+async function fixtureF() {
+  const qs = makeQuestions(200, 5, 55);
+  const k = await textDoc();
+  for (const q of qs) {
+    const page = k.doc.addPage([612, 792]);
+    let y = 730;
+    for (const l of wrap(k.font, `${q.n}. ${q.stem}`, 12, 500)) {
+      page.drawText(l, { x: 50, y, size: 12, font: k.font });
+      y -= 16;
+    }
+    y -= 10;
+    q.choices.forEach((ch, i) => {
+      page.drawText(`${LETTERS[i]}. ${ch}`, { x: 70, y, size: 12, font: k.font });
+      y -= 18;
+    });
+  }
+  fs.writeFileSync(path.join(out, 'f-200-pages.pdf'), await k.doc.save());
+  return qs;
+}
+
 const a = await fixtureA();
 await fixtureE(a);
+const f = await fixtureF();
 const b = await fixtureB();
 const c = await fixtureC();
 const d = await fixtureD();
-fs.writeFileSync(path.join(out, 'answers.json'), JSON.stringify({ a: a.map((q) => q.answer), b: b.map((q) => q.answer), c: c.map((q) => q.answer), d: d.map((q) => q.answer) }));
+fs.writeFileSync(path.join(out, 'answers.json'), JSON.stringify({ a: a.map((q) => q.answer), b: b.map((q) => q.answer), c: c.map((q) => q.answer), d: d.map((q) => q.answer), f: f.map((q) => q.answer) }));
 console.log('fixtures written to', path.relative(root, out));

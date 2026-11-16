@@ -29,6 +29,8 @@ export function SettingsPage() {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [msg, setMsg] = useState('');
   const [wipe, setWipe] = useState(false);
+  const [oneExam, setOneExam] = useState('');
+  const examList = useLive(() => db.exams.toArray(), []);
   const [wipeText, setWipeText] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -115,7 +117,29 @@ export function SettingsPage() {
             }}
           />
         </div>
-        <p className="mt-2 text-gray-700">To export a single exam, open it from the Library and choose “Export this exam”. Restoring never deletes anything: it merges.</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span>Export one exam (its PDF, key and attempts):</span>
+          <select className="field" value={oneExam} onChange={(e) => setOneExam(e.target.value)} data-testid="export-one-select">
+            <option value="">Choose an exam…</option>
+            {(examList ?? []).map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
+          </select>
+          <button
+            className="btn"
+            disabled={!oneExam}
+            data-testid="export-one"
+            onClick={async () => {
+              const e = examList?.find((x) => x.id === oneExam);
+              setMsg('Preparing…');
+              downloadBlob(await exportBackup({ examId: oneExam }), `block-sim-exam-${(e?.name ?? 'exam').replace(/[^\w-]+/g, '_').slice(0, 40)}.zip`);
+              setMsg('Exam exported. Restore it on any computer with “Restore from a backup file”.');
+            }}
+          >
+            Export
+          </button>
+        </div>
+        <p className="mt-2 text-gray-700">Restoring never deletes anything: it merges.</p>
       </div>
 
       <H2>Automatic snapshots</H2>
