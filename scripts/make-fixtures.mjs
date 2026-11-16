@@ -171,6 +171,11 @@ async function fixtureB() {
       y -= 16;
     }
     y -= 10;
+    if (q.n === 1) {
+      // a made-up "exhibit" picture: colored bands, like a photo or tracing
+      for (let b = 0; b < 12; b++) page.drawRectangle({ x: 70 + b * 14, y: y - 96, width: 14, height: 96, color: rgb(0.9 - b * 0.05, 0.5 + (b % 3) * 0.1, 0.35 + (b % 4) * 0.1) });
+      y -= 110;
+    }
     q.choices.forEach((ch, i) => {
       page.drawText(`(${LETTERS[i]}) ${ch}`, { x: 70, y, size: 12, font: k.font });
       y -= 18;
@@ -256,7 +261,33 @@ async function fixtureD() {
   return qs;
 }
 
+// ---------- e) key that marks each answer only with a yellow highlight (no "Answer:" text) ----------
+async function fixtureE(qs) {
+  const k = await textDoc();
+  for (const q of qs) {
+    const page = k.doc.addPage([612, 792]);
+    let y = 730;
+    for (const l of wrap(k.font, `${q.n}. ${q.stem}`, 11, 500)) {
+      page.drawText(l, { x: 50, y, size: 11, font: k.font });
+      y -= 15;
+    }
+    y -= 8;
+    q.choices.forEach((ch, i) => {
+      if (LETTERS[i] === q.answer) page.drawRectangle({ x: 66, y: y - 4, width: 380, height: 16, color: rgb(1, 1, 0) });
+      page.drawText(`${LETTERS[i]}) ${ch}`, { x: 70, y, size: 11, font: k.font });
+      y -= 20;
+    });
+    y -= 6;
+    for (const l of wrap(k.font, q.explanation.split('\n')[0], 11, 480)) {
+      page.drawText(l, { x: 90, y, size: 11, font: k.font, color: rgb(0, 0, 0.8) });
+      y -= 15;
+    }
+  }
+  fs.writeFileSync(path.join(out, 'e-highlight-key.pdf'), await k.doc.save());
+}
+
 const a = await fixtureA();
+await fixtureE(a);
 const b = await fixtureB();
 const c = await fixtureC();
 const d = await fixtureD();

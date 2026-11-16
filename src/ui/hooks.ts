@@ -91,5 +91,5 @@ export function fmtDateTime(t: number | null | undefined): string {
   return new Date(t).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 export function daysAgo(t: number, now = Date.now()): number {
-  return Math.floor((now - t) / 86_400_000);
+  return Math.max(0, Math.floor((Math.max(now, Date.now()) - t) / 86_400_000));
 }

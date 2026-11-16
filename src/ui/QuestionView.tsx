@@ -1,10 +1,87 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AttemptItem, ChoiceRegion, Exam, Highlight, PageText, Question, Rect, Segment } from '../types';
 import type { PdfDoc } from '../lib/pdf';
 import { segmentRect, usesChoiceRegions } from '../lib/layout';
 import { addWordRange, boxFromDrag, highlightAt, rectsForRange, removeHighlight, wordAt } from '../lib/highlights';
 import { uid } from '../db';
 import { PageView, type PageApi } from './PageView';
+import { ImageZoom } from './ImageZoom';
+import { detectFigures } from '../lib/figures';
+import { HIGHLIGHT_COLORS, HIGHLIGHT_RGBA, HIGHLIGHT_SWATCH, useDisplay } from '../lib/display';
+import type { HighlightColor } from '../types';
+import { renderToCanvas } from '../lib/pdf';
+
+/** Pictures on a page, found once per page and kept in memory. */
+const figureCache = new Map<string, Promise<Rect[]>>();
+function useFigures(examId: string, doc: PdfDoc, page: number, pt: PageText | undefined): Rect[] {
+  const [figs, setFigs] = useState<Rect[]>([]);
+  useEffect(() => {
+    // without the page's words, text would look like pictures: wait until the page has been read
+    if (!pt) return setFigs([]);
+    const key = `${examId}:${page}:${pt.words.length}`;
+    let p = figureCache.get(key);
+    if (!p) {
+      p = (async () => {
+        const c = await renderToCanvas(await doc.getPage(page), 600);
+        const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+        c.width = c.height = 1;
+        return detectFigures({ data: img.data, width: img.width, height: img.height }, pt.words);
+      })().catch(() => []);
+      figureCache.set(key, p);
+    }
+    let live = true;
+    void p.then((f) => live && setFigs(f));
+    return () => {
+      live = false;
+    };
+  }, [examId, doc, page, pt?.words.length]);
+  return figs;
+}
+
+function FigureLayer({ examId, doc, page, pt, api, onOpen }: { examId: string; doc: PdfDoc; page: number; pt: PageText | undefined; api: PageApi; onOpen: (r: Rect) => void }) {
+  const figs = useFigures(examId, doc, page, pt).filter((f) => f.x < api.crop.x + api.crop.w && f.x + f.w > api.crop.x && f.y < api.crop.y + api.crop.h && f.y + f.h > api.crop.y);
+  return (
+    <>
+      {figs.map((f, i) => {
+        const top = Math.max(f.y, api.crop.y);
+        const right = Math.min(f.x + f.w, api.crop.x + api.crop.w);
+        return (
+          <div key={i}>
+          {/* clicking the picture itself also opens it */}
+          <div
+            data-testid="zoom-image-area"
+            title="Click to zoom in"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(f);
+            }}
+            style={{ ...api.pos(f), cursor: 'zoom-in', zIndex: 1 }}
+          />
+          <button
+            type="button"
+            data-testid="zoom-image"
+            title="Zoom in on this image"
+            aria-label="Zoom in on this image"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(f);
+            }}
+            className="flex items-center gap-1 border border-gray-600 bg-white/95 px-1.5 py-0.5 text-[11px] text-black"
+            style={{ position: 'absolute', left: `calc(${((right - api.crop.x) / api.crop.w) * 100}% - 64px)`, top: `calc(${((top - api.crop.y) / api.crop.h) * 100}% + 4px)`, zIndex: 2 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="#111" strokeWidth="2.6" /><path d="m15 15 6 6M10 7v6M7 10h6" stroke="#111" strokeWidth="2.6" strokeLinecap="round" /></svg>
+            Zoom
+          </button>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export interface QuestionViewProps {
   exam: Exam;
@@ -44,8 +121,19 @@ interface Drag {
 export function QuestionView(p: QuestionViewProps) {
   const { exam, question, doc, texts, width } = p;
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [zoomed, setZoomed] = useState<{ page: number; rect: Rect } | null>(null);
+  const display = useDisplay();
+  /** manual highlighting: the selection waiting for a color */
+  const [pending, setPending] = useState<{ seg: number; page: number; w0: number; w1: number; x0: number; y0: number; x1: number; y1: number; px: number; py: number } | null>(null);
+  const makeHighlight = (sel: { page: number; w0: number; w1: number; x0: number; y0: number; x1: number; y1: number }, color: HighlightColor) => {
+    const words = texts.get(sel.page)?.words;
+    if (words && sel.w0 >= 0) return p.onHighlights!(addWordRange(highlights, sel.page, sel.w0, sel.w1, uid('h'), color));
+    const b = boxFromDrag(sel.page, sel.x0, sel.y0, sel.x1, sel.y1, uid('h'), color);
+    if (b) p.onHighlights!([...highlights, b]);
+  };
   const dragRef = useRef<Drag | null>(null);
   const longTimer = useRef<number | null>(null);
+  const lastPt = useRef({ x: 0, y: 0 });
   const highlights = p.item?.highlights ?? [];
   const strikes = p.hideStrikes ? [] : (p.item?.strikes ?? []);
   const clickable = usesChoiceRegions(exam, question);
@@ -70,6 +158,8 @@ export function QuestionView(p: QuestionViewProps) {
   const handlers = (segIndex: number, seg: Segment, api: () => PageApi | null): React.HTMLAttributes<HTMLDivElement> => ({
     onPointerDown: (e) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
+      lastPt.current = { x: e.clientX, y: e.clientY };
+      setPending(null);
       const a = api();
       if (!a) return;
       const pt = a.toPage(e.clientX, e.clientY);
@@ -92,6 +182,7 @@ export function QuestionView(p: QuestionViewProps) {
       }
     },
     onPointerMove: (e) => {
+      lastPt.current = { x: e.clientX, y: e.clientY };
       const d = dragRef.current;
       if (!d || d.seg !== segIndex) return;
       const a = api();
@@ -116,13 +207,17 @@ export function QuestionView(p: QuestionViewProps) {
       const words = texts.get(seg.page)?.words;
       if (d.moved) {
         if (!canMark) return;
-        if (words && d.w0 >= 0) p.onHighlights!(addWordRange(highlights, d.page, d.w0, d.w1, uid('h')));
-        else {
-          const b = boxFromDrag(d.page, d.x0, d.y0, d.x1, d.y1, uid('h'));
-          if (b) p.onHighlights!([...highlights, b]);
+        if (display.highlightMode === 'manual') {
+          // keep the selection and ask for a color next to where the drag ended
+          const a = api();
+          const box = (a && (document.querySelector(`[data-testid="question-view"]`) as HTMLElement | null)?.getBoundingClientRect()) || null;
+          setPending({ seg: segIndex, page: d.page, w0: d.w0, w1: d.w1, x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, px: lastPt.current.x - (box?.left ?? 0), py: lastPt.current.y - (box?.top ?? 0) });
+          return;
         }
+        makeHighlight(d, display.highlightColor);
         return;
       }
+      setPending(null);
       // a plain click: remove a highlight, or select a choice
       const hit = canMark ? highlightAt(highlights, words, d.page, d.x0, d.y0) : null;
       if (hit && !d.choice) return p.onHighlights!(removeHighlight(highlights, hit.id));
@@ -147,7 +242,7 @@ export function QuestionView(p: QuestionViewProps) {
   });
 
   return (
-    <div className="no-select" data-testid="question-view" style={{ paddingLeft: clickable ? 34 : 0 }}>
+    <div className="no-select relative" data-testid="question-view" style={{ paddingLeft: clickable ? 34 : 0 }}>
       {question.segments.map((seg, i) => {
         const text = texts.get(seg.page);
         const crop = segmentRect(exam, seg, text);
@@ -167,11 +262,12 @@ export function QuestionView(p: QuestionViewProps) {
               apiRef = api;
               const words = text?.words;
               const rectsOf = (h: Highlight): Rect[] => (h.kind === 'box' ? [h] : words ? rectsForRange(words, h.start, h.end) : []);
+              const sel = drag && drag.seg === i && drag.moved ? drag : pending && pending.seg === i ? { ...pending, moved: true } : null;
               const live: Rect[] =
-                drag && drag.seg === i && drag.moved && canMark
-                  ? words && drag.w0 >= 0
-                    ? rectsForRange(words, Math.min(drag.w0, drag.w1), Math.max(drag.w0, drag.w1))
-                    : [{ x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1), w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0) }]
+                sel && canMark
+                  ? words && sel.w0 >= 0
+                    ? rectsForRange(words, Math.min(sel.w0, sel.w1), Math.max(sel.w0, sel.w1))
+                    : [{ x: Math.min(sel.x0, sel.x1), y: Math.min(sel.y0, sel.y1), w: Math.abs(sel.x1 - sel.x0), h: Math.abs(sel.y1 - sel.y0) }]
                   : [];
               return (
                 <>
@@ -179,11 +275,11 @@ export function QuestionView(p: QuestionViewProps) {
                     .filter((h) => h.page === seg.page)
                     .flatMap((h) =>
                       rectsOf(h).map((r, k) => (
-                        <div key={h.id + k} data-testid="highlight" style={{ ...api.pos(pad(r, h.kind === 'words')), background: 'rgba(255, 235, 0, 0.42)', mixBlendMode: 'multiply', pointerEvents: 'none' }} />
+                        <div key={h.id + k} data-testid="highlight" data-color={h.color ?? 'yellow'} style={{ ...api.pos(pad(r, h.kind === 'words')), background: HIGHLIGHT_RGBA[h.color ?? 'yellow'], mixBlendMode: 'multiply', pointerEvents: 'none' }} />
                       )),
                     )}
                   {live.map((r, k) => (
-                    <div key={'live' + k} style={{ ...api.pos(pad(r, !!words && drag!.w0 >= 0)), background: 'rgba(255, 235, 0, 0.42)', mixBlendMode: 'multiply', pointerEvents: 'none' }} />
+                    <div key={'live' + k} style={{ ...api.pos(pad(r, !!words && sel!.w0 >= 0)), background: display.highlightMode === 'manual' ? 'rgba(80, 140, 255, 0.28)' : HIGHLIGHT_RGBA[display.highlightColor], mixBlendMode: 'multiply', pointerEvents: 'none' }} />
                   ))}
                   {clickable &&
                     (question.choices ?? [])
@@ -197,15 +293,34 @@ export function QuestionView(p: QuestionViewProps) {
                           struck={strikes.includes(c.letter)}
                           reveal={p.revealKey}
                           interactive={!p.readOnly}
+                          strikeX={Math.max(...(question.choices ?? []).filter((x) => x.page === seg.page).map((x) => x.x + x.w))}
+                          onStrike={!p.readOnly && p.onStrike ? p.onStrike : undefined}
                         />
                       ))}
                   {p.selectableText && words && <TextLayer words={words} api={api} />}
+                  <FigureLayer examId={exam.id} doc={doc} page={seg.page} pt={text} api={api} onOpen={(r) => setZoomed({ page: seg.page, rect: r })} />
                 </>
               );
             }}
           </PageView>
         );
       })}
+      {pending && p.onHighlights && (
+        <div
+          className="absolute z-30 flex items-center gap-1 border border-gray-500 bg-white p-1 shadow-md"
+          style={{ left: Math.max(0, pending.px - 70), top: pending.py + 14 }}
+          data-testid="highlight-picker"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {HIGHLIGHT_COLORS.map((c) => (
+            <button key={c} type="button" aria-label={`Highlight ${c}`} data-testid={`pick-${c}`} className="h-6 w-6" style={{ background: HIGHLIGHT_SWATCH[c], outline: c === display.highlightColor ? '2px solid #1f2d3d' : 'none' }} onClick={() => { makeHighlight(pending, c); setPending(null); }} />
+          ))}
+          <button type="button" aria-label="Cancel" className="px-1 text-sm text-gray-600" onClick={() => setPending(null)}>
+            ✕
+          </button>
+        </div>
+      )}
+      {zoomed && <ImageZoom doc={doc} page={zoomed.page} rect={zoomed.rect} onClose={() => setZoomed(null)} />}
     </div>
   );
 }
@@ -214,7 +329,7 @@ function pad(r: Rect, words: boolean): Rect {
   return words ? { x: r.x - 0.002, y: r.y - r.h * 0.12, w: r.w + 0.004, h: r.h * 1.24 } : r;
 }
 
-function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: ChoiceRegion; api: PageApi; selected: boolean; struck: boolean; reveal?: string | null; interactive: boolean }) {
+function ChoiceOverlay({ c, api, selected, struck, reveal, interactive, strikeX, onStrike }: { c: ChoiceRegion; api: PageApi; selected: boolean; struck: boolean; reveal?: string | null; interactive: boolean; strikeX: number; onStrike?: (l: string) => void }) {
   const isKey = !!reveal && reveal === c.letter;
   const wrong = !!reveal && selected && !isKey;
   const pxPerY = api.height / api.crop.h;
@@ -250,7 +365,7 @@ function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: C
           cursor: interactive ? 'pointer' : 'default',
         }}
       >
-        {struck && <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', borderTop: '2px solid #333' }} />}
+        {struck && <div style={{ position: 'absolute', left: c.radio ? `${((c.radio.x + c.radio.w - c.x + 0.004) / (c.w + 0.008)) * 100}%` : `${(0.007 / (c.w + 0.008)) * 100}%`, right: 0, top: '50%', borderTop: '2px solid #333' }} />}
       </div>
       <div
         style={{
@@ -270,6 +385,36 @@ function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: C
       >
         {selected && <div style={{ width: r * 0.56, height: r * 0.56, borderRadius: '50%', background: wrong ? '#dc2626' : isKey ? '#2e7d1e' : '#1c4973' }} />}
       </div>
+      {onStrike && (
+        <button
+          type="button"
+          data-testid={`strike-${c.letter}`}
+          aria-label={`${struck ? 'Undo strike-out of' : 'Strike out'} choice ${c.letter}`}
+          title={struck ? 'Undo strike-out' : 'Strike out this choice'}
+          aria-pressed={struck}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onStrike(c.letter);
+          }}
+          className="px-1 leading-none"
+          style={{
+            position: 'absolute',
+            left: `calc(${((Math.min(strikeX, api.crop.x + api.crop.w) - api.crop.x) / api.crop.w) * 100}% + 10px)`,
+            top: radio.top,
+            height: r,
+            fontSize: Math.max(12, r * 0.85),
+            textDecoration: 'line-through',
+            color: struck ? '#1c4973' : '#777',
+            fontWeight: struck ? 700 : 400,
+            zIndex: 2,
+          }}
+        >
+          ab
+        </button>
+      )}
       {reveal && (isKey || wrong) && (
         <div style={{ position: 'absolute', left: `calc(${radio.left} - ${r + 4}px)`, top: radio.top, fontWeight: 700, fontSize: r, lineHeight: 1, color: isKey ? '#2e7d1e' : '#dc2626', pointerEvents: 'none' }}>
           {isKey ? '✓' : '✗'}

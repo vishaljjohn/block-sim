@@ -66,7 +66,7 @@ export function buildMissedBank(attempts: Attempt[], reviews: ReviewRecord[]): M
     const r = rev.get(row.qid);
     const redos = [...(r?.redos ?? []), ...(rightTimes.get(row.qid) ?? []).map((t) => ({ t, answer: row.key ?? '', correct: true }))];
     const reviewedAt = r?.reviewedAt ?? [];
-    row.schedule = computeSchedule(missTimes.get(row.qid) ?? [row.missedAt], redos, reviewedAt.length > 0);
+    row.schedule = computeSchedule(missTimes.get(row.qid) ?? [row.missedAt], redos);
     const times = [...reviewedAt, ...(r?.redos ?? []).map((x) => x.t)];
     row.lastReviewed = times.length ? Math.max(...times) : null;
   }

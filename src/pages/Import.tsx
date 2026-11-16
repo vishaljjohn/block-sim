@@ -91,7 +91,8 @@ export function ImportPage() {
       // find question numbers, choices and (for "answer after each question") inline answers
       setBusy('Looking at the question pages…');
       cancelRef.current = { cancelled: false };
-      const expectedCount = key ? key.entries.filter((e) => e.answer || e.answerText).length || key.entries.length : undefined;
+      // the key's highest question number says how many questions there are, even when some answers were unreadable
+      const expectedCount = key && key.entries.length ? Math.max(...key.entries.map((e) => e.n)) : undefined;
       const analyzed = await analyzeExam(exam, doc, { auto: layout === 'auto', inlineAnswers: source === 'inline', endPage, startPage: start, skip: skipList, cancel: cancelRef.current, expectedCount }, (d, t, ocr) => {
         setOcrRunning(ocr && d < t);
         setBusy(ocr ? `Reading scanned pages with text recognition: ${d} of ${t}. This runs once per PDF…` : `Looking at the question pages: ${d} of ${t}…`);

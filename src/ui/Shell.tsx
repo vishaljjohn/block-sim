@@ -12,7 +12,7 @@ const NAV = [
 export function Shell({ path, children, wide }: { path: string; children: ReactNode; wide?: boolean }) {
   return (
     <div className="flex min-h-full flex-col">
-      <header className="dark-focus flex flex-wrap items-center gap-x-6 gap-y-1 bg-navy px-4 py-2 text-white">
+      <header className="keep-colors dark-focus flex flex-wrap items-center gap-x-6 gap-y-1 bg-navy px-4 py-2 text-white">
         <a href="#/" className="status-font text-lg font-bold">
           Block Sim
           {IS_BETA && <span className="ml-2 bg-yellow-300 px-1 text-xs font-bold text-black" data-testid="beta-badge">BETA</span>}

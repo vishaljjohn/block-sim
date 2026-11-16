@@ -91,9 +91,25 @@ export const MISS_REASONS: { id: MissReason; label: string }[] = [
   { id: 'time', label: 'Ran out of time' },
 ];
 
+export type HighlightColor = 'yellow' | 'pink' | 'green' | 'blue' | 'purple';
+
+/** color is optional: highlights saved before colors existed are yellow */
 export type Highlight =
-  | { id: string; kind: 'box'; page: number; x: number; y: number; w: number; h: number }
-  | { id: string; kind: 'words'; page: number; start: number; end: number };
+  | { id: string; kind: 'box'; page: number; x: number; y: number; w: number; h: number; color?: HighlightColor }
+  | { id: string; kind: 'words'; page: number; start: number; end: number; color?: HighlightColor };
+
+export interface Display {
+  theme: 'light' | 'dark';
+  size: 'S' | 'M' | 'L' | 'XL';
+  bold: boolean;
+  /** 'board' = board-style test screen (navy bars, striped status list); 'default' = cleaner modern look */
+  layout: 'board' | 'default';
+  /** quick: dragging highlights at once; manual: drag selects, then pick a color to apply */
+  highlightMode: 'quick' | 'manual';
+  highlightColor: HighlightColor;
+}
+
+export const DEFAULT_DISPLAY: Display = { theme: 'light', size: 'M', bold: false, layout: 'board', highlightMode: 'quick', highlightColor: 'yellow' };
 
 export interface AnswerChange {
   t: number;
@@ -200,6 +216,7 @@ export interface Settings {
   zoom: number;
   sidebarOpen: boolean;
   noFolderChosen: boolean;
+  display: Display;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -209,6 +226,7 @@ export const DEFAULT_SETTINGS: Settings = {
   zoom: 1,
   sidebarOpen: true,
   noFolderChosen: false,
+  display: DEFAULT_DISPLAY,
 };
 
 export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

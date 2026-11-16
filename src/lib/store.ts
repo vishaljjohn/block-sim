@@ -1,7 +1,7 @@
 import { SNAPSHOT_KEEP, STORAGE_PREFIX } from '../config';
 import { db, getMeta, setMeta, uid } from '../db';
 import type { Attempt, Exam, PageText, ReviewRecord, Settings, Snapshot } from '../types';
-import { DEFAULT_SETTINGS } from '../types';
+import { DEFAULT_DISPLAY, DEFAULT_SETTINGS, type Display } from '../types';
 import type { Tombstone } from './merge';
 import { forgetPdf } from './pdf';
 
@@ -128,7 +128,13 @@ export async function markReviewed(qid: string, examId: string, t = Date.now()):
 }
 
 export async function getSettings(): Promise<Settings> {
-  return { ...DEFAULT_SETTINGS, ...(await getMeta<Partial<Settings>>('settings', {})) };
+  const s = await getMeta<Partial<Settings>>('settings', {});
+  return { ...DEFAULT_SETTINGS, ...s, display: { ...DEFAULT_DISPLAY, ...(s.display ?? {}) } };
+}
+
+export async function patchDisplay(p: Partial<Display>): Promise<Settings> {
+  const s = await getSettings();
+  return patchSettings({ display: { ...s.display, ...p } });
 }
 export async function patchSettings(p: Partial<Settings>): Promise<Settings> {
   const s = { ...(await getSettings()), ...p };

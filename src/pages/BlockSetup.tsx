@@ -192,7 +192,17 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
         <button className="btn-primary px-6 py-2 text-base" disabled={!count || busy} onClick={start} data-testid="start-block">
           Start block
         </button>
-        {!count && <span className="ml-3 text-sm text-red-700">No questions match this selection.</span>}
+        {!count && (
+          <span className="ml-3 text-sm text-red-700">
+            {bank ? (
+              <>
+                No questions chosen. Open <a className="link" href="#/missed">Missed Questions</a>, filter the list, and click “Quiz me on these”.
+              </>
+            ) : (
+              'No questions match this selection.'
+            )}
+          </span>
+        )}
       </div>
     </div>
   );

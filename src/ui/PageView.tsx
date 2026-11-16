@@ -93,7 +93,7 @@ export function PageView({ examId, doc, page, crop, width, children, handlers, c
       {...handlers}
     >
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-        <canvas ref={canvasRef} style={{ position: 'absolute', left: -crop.x * fullW, top: -crop.y * fullH, width: fullW, height: fullH }} />
+        <canvas ref={canvasRef} className="page-canvas" style={{ position: 'absolute', left: -crop.x * fullW, top: -crop.y * fullH, width: fullW, height: fullH }} />
       </div>
       {size && children ? children(api) : null}
     </div>

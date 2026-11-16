@@ -1,15 +1,15 @@
-import type { Highlight, Rect, Word } from '../types';
+import type { Highlight, HighlightColor, Rect, Word } from '../types';
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
 
 /** Box highlight from two drag corners, in page fractions. Returns null for a stray click. */
-export function boxFromDrag(page: number, x0: number, y0: number, x1: number, y1: number, id: string): Highlight | null {
+export function boxFromDrag(page: number, x0: number, y0: number, x1: number, y1: number, id: string, color?: HighlightColor): Highlight | null {
   const x = clamp(Math.min(x0, x1));
   const y = clamp(Math.min(y0, y1));
   const w = clamp(Math.max(x0, x1)) - x;
   const h = clamp(Math.max(y0, y1)) - y;
   if (w < 0.008 || h < 0.004) return null;
-  return { id, kind: 'box', page, x, y, w, h };
+  return { id, kind: 'box', page, x, y, w, h, ...(color && color !== 'yellow' ? { color } : {}) };
 }
 
 /** Index of the word under (or nearest on the same line to) a point; -1 if nothing is close. */
@@ -29,17 +29,18 @@ export function wordAt(words: Word[], x: number, y: number, slack = 0.012): numb
 }
 
 /** Add a word-range highlight, merging with any ranges it touches on the same page. */
-export function addWordRange(list: Highlight[], page: number, a: number, b: number, id: string): Highlight[] {
+export function addWordRange(list: Highlight[], page: number, a: number, b: number, id: string, color?: HighlightColor): Highlight[] {
   let start = Math.min(a, b);
   let end = Math.max(a, b);
   const rest: Highlight[] = [];
   for (const h of list) {
-    if (h.kind === 'words' && h.page === page && h.start <= end + 1 && h.end >= start - 1) {
+    // touching ranges of the same color join up; other colors stay as they are
+    if (h.kind === 'words' && h.page === page && (h.color ?? 'yellow') === (color ?? 'yellow') && h.start <= end + 1 && h.end >= start - 1) {
       start = Math.min(start, h.start);
       end = Math.max(end, h.end);
     } else rest.push(h);
   }
-  return [...rest, { id, kind: 'words', page, start, end }];
+  return [...rest, { id, kind: 'words', page, start, end, ...(color && color !== 'yellow' ? { color } : {}) }];
 }
 
 export function removeHighlight(list: Highlight[], id: string): Highlight[] {

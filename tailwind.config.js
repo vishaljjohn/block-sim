@@ -3,8 +3,8 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      colors: { navy: { DEFAULT: '#1c4973', dark: '#153a5c', light: '#2a5d8f' } },
-      fontFamily: { sans: ['Arial', 'Helvetica', 'sans-serif'] },
+      colors: { navy: { DEFAULT: 'rgb(var(--bar) / <alpha-value>)', dark: 'rgb(var(--bar-dark) / <alpha-value>)', light: '#2a5d8f' } },
+      fontFamily: { sans: ['var(--font)'] },
     },
   },
   plugins: [],

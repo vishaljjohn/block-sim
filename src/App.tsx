@@ -24,6 +24,7 @@ import { SettingsPage } from './pages/Settings';
 import { Faq } from './pages/Faq';
 import { Welcome } from './pages/Welcome';
 import { LayoutEditor } from './pages/LayoutEditor';
+import { useApplyDisplay } from './lib/display';
 
 registerServiceWorker();
 
@@ -34,6 +35,7 @@ export function App() {
   const [fatal, setFatal] = useState<string | null>(null);
   const route = useRoute();
   const update = useUpdateAvailable();
+  useApplyDisplay();
 
   useEffect(() => {
     guard.current = startTabGuard((s) => {
@@ -141,6 +143,12 @@ export function App() {
   const name = route.parts.slice(0, 2).join('/') || 'home';
   return (
     <>
+      {/* "Bold" display setting: thickens dark strokes in page images */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <filter id="bs-bold">
+          <feMorphology operator="erode" radius="0.6" />
+        </filter>
+      </svg>
       {update && !inBlock && (
         <div className="flex items-center justify-center gap-3 border-b border-yellow-600 bg-yellow-100 px-3 py-1.5 text-sm" role="status" data-testid="update-banner">
           Update available{IS_BETA ? ' (beta)' : ''}.

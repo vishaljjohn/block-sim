@@ -114,7 +114,12 @@ export const highlightReader: HighlightReader = async (doc, page, words) => {
   const pg = await doc.getPage(page);
   const c = await renderToCanvas(pg, 900);
   const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
-  const out = highlightedChoice({ data: img.data, width: c.width, height: c.height }, d.choices);
+  // the highlighted line can be the one whose label was not read: also test the slot after the last choice
+  const tops = d.choices.map((x) => x.y);
+  const step = tops.length > 1 ? (tops[tops.length - 1] - tops[0]) / (tops.length - 1) : 0.03;
+  const last = d.choices[d.choices.length - 1];
+  const extra = { letter: String.fromCharCode(last.letter.charCodeAt(0) + 1), x: last.x, y: last.y + step, w: Math.max(...d.choices.map((x) => x.w)), h: Math.min(last.h, step) };
+  const out = highlightedChoice({ data: img.data, width: c.width, height: c.height }, [...d.choices, extra]);
   c.width = c.height = 1;
   return out;
 };
@@ -169,10 +174,14 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
     // the key says how many questions there are: when whole pages divide evenly into that many questions and
     // the page text disagrees, trust the page count (screenshots without readable question numbers)
     const n = opts.expectedCount ?? 0;
-    if (opts.auto && n >= 2 && lay.questions.length !== n && pages.length % n === 0 && !lay.multiPerPage) {
-      const per = pages.length / n;
-      questions = fixedLayout(exam.id, { pagesPerQuestion: per, startPage: opts.startPage, endPage: opts.endPage, skip: opts.skip });
-      enough = false;
+    if (opts.auto && n >= 2 && lay.questions.length !== n && !lay.multiPerPage) {
+      // compare with "k whole pages per question": use it when its count is closer to the key's count
+      const per = Math.max(1, Math.round(pages.length / n));
+      const fixedCount = Math.ceil(pages.length / per);
+      if (Math.abs(fixedCount - n) < Math.abs(lay.questions.length - n)) {
+        questions = fixedLayout(exam.id, { pagesPerQuestion: per, startPage: opts.startPage, endPage: opts.endPage, skip: opts.skip });
+        enough = false;
+      }
     }
     if (opts.auto && enough) {
       questions = lay.questions.map((d, i) => {

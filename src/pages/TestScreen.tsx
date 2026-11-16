@@ -34,6 +34,8 @@ import { classifyChange, isCorrect } from '../lib/score';
 import { choiceLetters, segmentRect, usesChoiceRegions } from '../lib/layout';
 import { examPdf, pageSize, renderPage, type PdfDoc } from '../lib/pdf';
 import { setOcrConcurrency } from '../lib/ocr';
+import { SIZE_FACTOR, useDisplay } from '../lib/display';
+import { DisplaySettings } from '../ui/DisplaySettings';
 import { startTicker } from '../lib/ticker';
 import { createSnapshot, markReviewed, patchSettings, saveAttempt, saveExam } from '../lib/store';
 import { go, useElementWidth, useLive } from '../ui/hooks';
@@ -78,16 +80,16 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [now, setNow] = useState(Date.now());
   const [panel, setPanel] = useState<{ labs: boolean; calc: boolean; notes: boolean }>({ labs: false, calc: false, notes: false });
   const [menu, setMenu] = useState(false);
-  const [modal, setModal] = useState<null | 'grid' | 'confirm' | 'help'>(null);
+  const [modal, setModal] = useState<null | 'grid' | 'end' | 'confirm' | 'help'>(null);
   const [navFilter, setNavFilter] = useState<null | 'marked' | 'incomplete'>(null);
   const [filter, setFilter] = useState<Filter>((FILTERS.find((f) => f.id === startFilter)?.id ?? 'all') as Filter);
   const [showElapsed, setShowElapsed] = useState(false);
-  const [zoom, setZoom] = useState(1);
   const [sidebar, setSidebar] = useState(true);
   const [hideStrikes, setHideStrikes] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [areaRef, areaW] = useElementWidth<HTMLDivElement>();
+  const display = useDisplay();
   const lastTick = useRef(Date.now());
 
   // keep the test screen smooth: background text recognition uses a single worker while a block is open
@@ -127,7 +129,6 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
       if (!live) return;
       setExams(new Map(list.filter((e): e is Exam => !!e).map((e) => [e.id, e])));
       const s = await patchSettings({});
-      setZoom(s.zoom || 1);
       setSidebar(s.sidebarOpen);
     })();
     return () => {
@@ -410,12 +411,11 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
       if (e.key === 'Escape') {
         setPanel({ labs: false, calc: false, notes: false });
         setMenu(false);
-        if (modal === 'grid' || modal === 'help' || modal === 'confirm') setModal(null);
+        if (modal) setModal(null);
         (document.activeElement as HTMLElement | null)?.blur?.();
         return;
       }
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
-      if (el?.closest('[data-testid="calc-panel"]')) return;
       if (e.ctrlKey || e.metaKey || modal || !aRef.current) return;
       const c = aRef.current;
       if (!review && (c.paused || c.phase !== 'block')) return;
@@ -447,7 +447,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const answerCol = clickable ? 0 : 168;
   const explainW = showExplain ? Math.max(300, Math.min(520, Math.round(areaW * 0.36))) : 0;
   const baseW = Math.max(280, Math.min(1180, areaW - 44 - answerCol - explainW - (showExplain ? 24 : 0)));
-  const qWidth = Math.round(baseW * zoom);
+  const qWidth = Math.round(baseW * SIZE_FACTOR[display.size]);
 
   useEffect(() => {
     if (!a || !doc || qWidth <= 0) return;
@@ -465,11 +465,6 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
     }
   }, [a?.current, doc, qWidth, order.length]);
 
-  const setZoomSaved = (z: number) => {
-    const v = Math.max(0.5, Math.min(2.5, Math.round(z * 10) / 10));
-    setZoom(v);
-    void patchSettings({ zoom: v });
-  };
   const toggleSidebar = () => {
     setSidebar((s) => {
       void patchSettings({ sidebarOpen: !s });
@@ -514,6 +509,9 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
 
   const idxInList = review ? a.current + 1 : a.current - b.start + 1;
   const listLen = review ? a.items.length : b.end - b.start;
+  // with a review filter (or Review Marked/Incomplete) the counter shows the place in that shorter list
+  const filtered = (review && filter !== 'all') || (!review && navFilter != null);
+  const posText = filtered && order.includes(a.current) ? `${order.indexOf(a.current) + 1} / ${order.length}` : `${idxInList} / ${listLen}`;
   const pos = order.indexOf(a.current);
   const elapsedMs = T.elapsed(b.timer, now);
   const remMs = T.remaining(b.timer, b.limitMs, now);
@@ -576,12 +574,24 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
               })}
               {sidebarItems.length === 0 && <div className="p-2 text-xs">No questions match this filter.</div>}
             </div>
+            <div className="border-t border-gray-300 px-1 py-1 text-[10px] leading-tight text-gray-700" data-testid="status-legend">
+              {review ? (
+                <>
+                  <Check size={9} /> correct · <Cross size={9} /> wrong
+                </>
+              ) : (
+                <>• unanswered</>
+              )}
+              <div>
+                <IconFlag size={9} /> marked
+              </div>
+            </div>
           </nav>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* -------- top bar -------- */}
-          <header className="dark-focus relative flex h-[62px] shrink-0 items-center justify-between bg-navy px-2 text-white">
+          <header className="keep-colors dark-focus relative z-30 flex h-[62px] shrink-0 items-center justify-between bg-navy px-2 text-white">
             <div className="flex min-w-0 items-center gap-3">
               <div className="status-font shrink-0 border border-white px-2 py-0.5 text-[14px] leading-tight" data-testid="item-box">
                 <div>
@@ -600,7 +610,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 <IconPrev />
               </ToolButton>
               <span className="status-font text-[14px]" data-testid="position">
-                {idxInList} / {listLen}
+                {posText}
               </span>
               <ToolButton label="Next" onClick={() => step(1)} disabled={pos === -1 || pos >= order.length - 1} testId="next">
                 <IconNext />
@@ -621,16 +631,9 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
               </ToolButton>
             </div>
             {menu && (
-              <div className="status-font absolute right-1 top-[60px] z-50 w-64 border border-gray-600 bg-white py-1 text-[14px] text-black" role="menu" data-testid="settings-menu">
-                <div className="flex items-center justify-between px-3 py-1">
-                  <span>Resize</span>
-                  <span className="flex items-center gap-1">
-                    <button className="btn px-2 py-0" onClick={() => setZoomSaved(zoom - 0.1)} aria-label="Zoom out" data-testid="zoom-out">−</button>
-                    <span className="w-12 text-center" data-testid="zoom-value">{Math.round(zoom * 100)}%</span>
-                    <button className="btn px-2 py-0" onClick={() => setZoomSaved(zoom + 0.1)} aria-label="Zoom in" data-testid="zoom-in">+</button>
-                    <button className="btn px-2 py-0" onClick={() => setZoomSaved(1)}>Fit</button>
-                  </span>
-                </div>
+              <div className="status-font absolute right-1 top-[60px] z-50 max-h-[calc(100vh-130px)] w-[340px] max-w-[calc(100vw-12px)] overflow-y-auto border border-gray-400 bg-white px-4 py-1 text-[14px] text-black shadow-lg" role="menu" data-testid="settings-menu">
+                <DisplaySettings />
+                <div className="-mx-4 border-t border-gray-200 pt-1">
                 {[
                   { l: sidebar ? 'Hide Question Status' : 'Show Question Status', f: toggleSidebar },
                   { l: 'Show/Hide Strikeout', f: () => setHideStrikes((s) => !s) },
@@ -653,10 +656,11 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                   { l: 'Help: keyboard shortcuts', f: () => setModal('help') },
                   { l: review ? 'Exit review' : 'Save and exit to Home', f: exitHome },
                 ].map((m) => (
-                  <button key={m.l} role="menuitem" className="block w-full px-3 py-1 text-left hover:bg-gray-200" onClick={() => { setMenu(false); m.f(); }}>
+                  <button key={m.l} role="menuitem" className="block w-full px-4 py-1 text-left hover:bg-gray-200" onClick={() => { setMenu(false); m.f(); }}>
                     {m.l}
                   </button>
                 ))}
+                </div>
               </div>
             )}
           </header>
@@ -884,7 +888,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
           </main>
 
           {/* -------- bottom bar -------- */}
-          <footer className="dark-focus relative flex h-[58px] shrink-0 items-center justify-between bg-navy px-2 text-white">
+          <footer className="keep-colors dark-focus relative flex h-[58px] shrink-0 items-center justify-between bg-navy px-2 text-white">
             {review ? (
               <div className="status-font border border-white px-2 py-1 text-[13px]">
                 Review · {a.items.filter(isCorrect).length} of {a.items.length} correct
@@ -921,10 +925,10 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 </>
               ) : (
                 <>
-                  <ToolButton label="Review" onClick={() => setModal('grid')} testId="btn-review" disabled={a.paused}>
+                  <ToolButton label="Review" onClick={() => { setPanel({ labs: false, calc: false, notes: false }); setModal('grid'); }} testId="btn-review" disabled={a.paused}>
                     <IconGrid />
                   </ToolButton>
-                  <ToolButton label="End Block" onClick={() => setModal('grid')} testId="end-block" disabled={a.paused}>
+                  <ToolButton label="End Block" onClick={() => { setPanel({ labs: false, calc: false, notes: false }); setModal('end'); }} testId="end-block" disabled={a.paused}>
                     <IconEnd />
                   </ToolButton>
                 </>
@@ -938,8 +942,8 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
       {panel.calc && <Calculator onClose={() => setPanel((p) => ({ ...p, calc: false }))} />}
       {panel.notes && cur && <NotesPanel key={cur.qid} value={cur.note} readOnly={review || itemLocked} onChange={(v) => editItem((it) => ({ ...it, note: v }))} onClose={() => setPanel((p) => ({ ...p, notes: false }))} />}
 
-      {modal === 'grid' && (
-        <Modal title="Review: End Block" onClose={() => setModal(null)} wide>
+      {(modal === 'grid' || modal === 'end') && (
+        <Modal title={modal === 'end' ? 'End Block' : 'Review'} onClose={() => setModal(null)} wide>
           <div className="mb-2 flex flex-wrap gap-4 text-sm" data-testid="grid-summary">
             <span>Answered: <b>{answered}</b></span>
             <span>Unanswered: <b>{blockItems.length - answered}</b></span>
@@ -970,7 +974,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
             </div>
             <div className="flex gap-2">
               <button className="btn" onClick={() => setModal(null)}>Return to Block</button>
-              <button className="btn-primary" onClick={() => setModal('confirm')} data-testid="grid-end">End Block</button>
+              <button className={modal === 'end' ? 'btn-primary' : 'btn'} onClick={() => setModal('confirm')} data-testid="grid-end">End Block</button>
             </div>
           </div>
         </Modal>
@@ -1003,6 +1007,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 ['Esc', 'Close panels and menus'],
                 ['Right-click (long-press on iPad)', 'Strike out a choice'],
                 ['Drag across text', 'Highlight; click a highlight to remove it'],
+                ['Click a picture (or Zoom)', 'Pop the image out; − / + to zoom'],
               ].map(([k, v]) => (
                 <tr key={k}>
                   <td className="td whitespace-nowrap font-bold">{k}</td>
@@ -1011,7 +1016,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-gray-700">When a shortcut letter is also an answer choice on the current question (for example C), the plain key selects the choice. Hold Alt (Option) with the letter to use the shortcut instead.</p>
+          <p className="mt-2 text-xs text-gray-700">Letters pick answer choices first: on a question with choices A–E, pressing C picks choice C. To use a shortcut whose letter is also a choice, hold Alt (Option on a Mac): Alt+C opens the Calculator. You can always click the buttons instead.</p>
         </Modal>
       )}
     </div>

@@ -174,7 +174,7 @@ export function KeyCheck({ examId }: { examId: string }) {
                       )}
                     </td>
                     <td className="td">
-                      <input className="field w-32" defaultValue={x.tags.join(', ')} key={x.tags.join(',')} placeholder="Cardio, Renal" aria-label={`Tags for question ${x.number}`} data-testid={`key-tags-${x.number}`} onBlur={(e) => { const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean); if (tags.join(',') !== x.tags.join(',')) patchQ(i, { tags }); }} />
+                      <input className="field w-32" defaultValue={x.tags.join(', ')} key={x.tags.join(',')} placeholder="e.g. Cardio" aria-label={`Tags for question ${x.number}`} data-testid={`key-tags-${x.number}`} onBlur={(e) => { const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean); if (tags.join(',') !== x.tags.join(',')) patchQ(i, { tags }); }} />
                     </td>
                     <td className="td">
                       <textarea className="field h-[30px] w-full min-w-[180px] text-xs focus:h-40" value={x.explanation} aria-label={`Explanation for question ${x.number}`} data-testid={`key-expl-${x.number}`} onChange={(e) => patchQ(i, { explanation: e.target.value })} />

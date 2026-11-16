@@ -102,6 +102,7 @@ export interface MergeResult {
   exams: number;
   attempts: number;
   reviews: number;
+  /** PDFs added to this device (PDFs already here are not copied again) */
   pdfs: number;
 }
 
@@ -110,7 +111,7 @@ export interface MergeResult {
  * Existing data is never replaced by an older copy and nothing local is removed
  * (except documents explicitly deleted, on any computer, after their last change).
  */
-export async function mergeIntoDb(files: FileSet): Promise<MergeResult> {
+export async function mergeIntoDb(files: FileSet, opts: { resurrect?: boolean } = {}): Promise<MergeResult> {
   const man = files.json.get('manifest.json') as { app?: string } | undefined;
   if (man && man.app && man.app !== 'block-sim') throw new Error('This file is not a Block Sim backup.');
   const inExams: Exam[] = [];
@@ -124,7 +125,12 @@ export async function mergeIntoDb(files: FileSet): Promise<MergeResult> {
     else if (name.startsWith('attempts/') && (value as Attempt)?.items) inAttempts.push(migrateAttempt(value));
     else if (name.startsWith('reviews/') && Array.isArray(value)) inReviews = mergeReviews(inReviews, value as ReviewRecord[]);
   }
-  const tombs = mergeTombstones(await getTombstones(), (files.json.get('deleted.json') as Tombstone[] | undefined) ?? []);
+  let tombs = mergeTombstones(await getTombstones(), (files.json.get('deleted.json') as Tombstone[] | undefined) ?? []);
+  if (opts.resurrect) {
+    // the user chose to restore this backup: whatever it contains comes back, even if it was deleted here since
+    const back = new Set([...inExams.map((e) => e.id), ...inAttempts.map((a) => a.id)]);
+    tombs = tombs.filter((t) => !back.has(t.id));
+  }
   await setMeta('tombstones', tombs);
 
   const localExams = await db.exams.toArray();
@@ -160,5 +166,5 @@ export async function mergeIntoDb(files: FileSet): Promise<MergeResult> {
 }
 
 export async function restoreBackup(file: Blob): Promise<MergeResult> {
-  return mergeIntoDb(await readZip(file));
+  return mergeIntoDb(await readZip(file), { resurrect: true });
 }

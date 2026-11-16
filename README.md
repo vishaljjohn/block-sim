@@ -32,8 +32,9 @@ No folder (Safari, iPad, or you skipped it)? Your history lives in the browser. 
 1. Choose the question PDF.
 2. Layout: leave **Work it out for me** (it reads question numbers on the pages). If your PDF is exactly N pages
    per question, choose **Fixed** instead. You can also set the first question page and pages to skip.
-3. Answer key: a separate PDF, the end of the same PDF, after each question, or **paste it**
-   (`1 C, 2 A, 3 B…`, `1. C`, or one letter per line all work).
+3. Answer key: a separate PDF; the end of the same PDF (type the page where the key starts); after each question
+   (hidden while you take the exam); **paste it** (`1 C, 2 A, 3 B…`, `1. C`, or one letter per line all work); or
+   no key yet (type the answers on the next screen). Keys that mark the answer only with a highlight work too.
 4. Click **Continue**.
 
 Only import materials you have the right to use.
@@ -41,7 +42,7 @@ Only import materials you have the right to use.
 ### 4. Check the answer key
 You see a table: question number, answer, number of choices, pages, tags and explanation. Everything is editable.
 Rows with a problem are red; **Jump to next warning** takes you through them. Click a row to see that question.
-When it looks right, click **Key looks right: save**. You can come back any time (**Edit** in the Library); fixing
+When it looks right, click **Key looks right: save** (you land on the exam's page, with **New attempt**). You can come back any time (**Edit** in the Library); fixing
 the key also re-grades your old attempts.
 
 ### 5. Take a block
@@ -56,21 +57,26 @@ Presets: 40 questions / 60 minutes, or shelf-style (110 questions in 4 blocks, 2
 In the block:
 - **Answer**: click the choice on the page (or the bubble beside it), or press its letter.
 - **Highlight**: drag across text. Click a highlight to remove it.
-- **Strike out**: right-click a choice (long-press on iPad).
 - **Mark**: the checkbox above the question, or **M**.
+- **Pictures** (photos, ECGs, x-rays): click the picture or its **Zoom** button to pop it out; use − / + (or the − and + keys) to zoom, drag the title bar to move it.
 - **Lab Values** (L), **Calculator** (C), **Notes**: top right. Esc closes them.
-- **← / →** or **P / N**: previous / next. If a shortcut letter is also a choice, hold **Alt/Option** with it.
+- **← / →** or **P / N**: previous / next. Letters pick answer choices first (on a question with choices A–E, **C** picks choice C); to use a shortcut whose letter is also a choice, hold **Alt/Option** (Alt+C opens the Calculator).
 - **Pause** hides the question and stops the clock. If your computer sleeps or you close the window, the clock
   stops at that moment and **Resume block** brings you back exactly where you were.
-- **End Block** shows a grid of answered / unanswered / marked questions with **Review Marked** and
-  **Review Incomplete** before you confirm.
+- **Review** (bottom right) shows a grid of answered / unanswered / marked questions with **Review Marked** and
+  **Review Incomplete**; **End Block** shows the same grid and then asks you to confirm.
+- **Settings** (gear, top right): light/dark, text size S–XL, bold, Default or Board-style look, and highlighting
+  (**Quick**: dragging highlights at once; **Manual**: drag, then pick a color) with a default color.
+- **Strike out** a choice with the **ab** button to its right (or right-click it; long-press on iPad).
+  Strike-outs, highlights and notes are kept and shown again when you review the block.
 
 ### 6. Review
 After a block you get a score report (percent, time, answer changes, accuracy by confidence, time per question,
 score by tag). **Review** opens the same test screen read-only, with your highlights, strike-outs and notes as you
 left them, your answer in red/green, and the explanation on the right. Filter by incorrect, marked, changed
 answers, guesses or slowest 10. For each miss, click a **reason** and write a **review note**.
-Every attempt stays in the exam's history with a score trend chart.
+Every attempt stays in the exam's history with a score trend chart. An unfinished block you no longer want can be
+discarded from the Library.
 
 ### 7. Missed Questions
 **Missed Questions** collects every question you got wrong, guessed or marked, across all exams. Filter it, click a
@@ -81,8 +87,9 @@ shows a **Due for review** card. **Quiz me** builds a block from whatever the li
 
 ### 8. Back up
 - With a data folder: nothing to do (and put the folder in a cloud drive for an off-computer copy).
-- Without: **Back up now** (Library, after each block, or Settings). Restore with **Settings → Restore from a backup
-  file**. Restoring merges; it never deletes anything.
+- Without: **Back up now** (Library or after each block), or **Settings → Export everything**. Restore with
+  **Settings → Restore from a backup file**. Restoring merges and never deletes anything; it also brings back exams
+  you deleted after making that backup.
 
 ### 9. Move to a new computer
 - With a data folder in a cloud drive: open Block Sim on the new computer, **Choose a data folder**, pick the same

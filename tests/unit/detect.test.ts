@@ -218,3 +218,23 @@ describe('choices in two side-by-side columns', () => {
     expect(d.choices[0].x + d.choices[0].w).toBeLessThan(d.choices[6].x);
   });
 });
+
+describe('pictures in a question', () => {
+  it('finds a photo next to text and ignores the text itself', async () => {
+    const { detectFigures } = await import('../../src/lib/figures');
+    const W = 240;
+    const H = 180;
+    const data = new Uint8ClampedArray(W * H * 4).fill(255);
+    // text-like ink on the left, covered by word boxes
+    for (let y = 20; y < 26; y++) for (let x = 10; x < 110; x++) if (x % 2) data.set([0, 0, 0, 255], (y * W + x) * 4);
+    const ws: Word[] = [{ t: 'text', x: 10 / W, y: 20 / H, w: 100 / W, h: 6 / H, c: 99 }];
+    // a photo on the right
+    for (let y = 30; y < 110; y++) for (let x = 140; x < 220; x++) data.set([200 - (x % 40), 150, 120 + (y % 30), 255], (y * W + x) * 4);
+    const f = detectFigures({ data, width: W, height: H }, ws);
+    expect(f.length).toBe(1);
+    expect(f[0].x).toBeGreaterThan(130 / W);
+    expect(f[0].x + f[0].w).toBeLessThan(230 / W);
+    expect(f[0].h).toBeGreaterThan(70 / H);
+    expect(detectFigures({ data: new Uint8ClampedArray(W * H * 4).fill(255), width: W, height: H }, [])).toEqual([]);
+  });
+});

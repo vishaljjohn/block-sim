@@ -168,11 +168,14 @@ export function intersect(a: Rect, b: Rect): Rect {
  */
 export function highlightedChoice(px: Pixels, choices: { letter: string; x: number; y: number; w: number; h: number }[]): string | null {
   const { data, width: W, height: H } = px;
+  // look at each choice's first line only: the last choice's region can run into the explanation below it
+  const hs = choices.map((c) => c.h).sort((a, b) => a - b);
+  const lineH = hs[Math.floor(hs.length / 2)] ?? 0.02;
   const score = choices.map((c) => {
     const x0 = Math.max(0, Math.floor(c.x * W));
     const x1 = Math.min(W - 1, Math.ceil((c.x + c.w) * W));
     const y0 = Math.max(0, Math.floor(c.y * H));
-    const y1 = Math.min(H - 1, Math.ceil((c.y + c.h) * H));
+    const y1 = Math.min(H - 1, Math.ceil((c.y + Math.min(c.h, lineH * 1.1)) * H));
     let n = 0;
     let hit = 0;
     for (let y = y0; y <= y1; y++)

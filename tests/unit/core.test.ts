@@ -215,3 +215,14 @@ describe('score + missed bank', () => {
     expect(flips(a, b).map((f) => f.kind)).toEqual(['wrong→right', 'right→wrong']);
   });
 });
+
+describe('highlight colors', () => {
+  it('touching ranges merge only when they have the same color', () => {
+    let list = addWordRange([], 1, 0, 3, 'a', 'pink');
+    list = addWordRange(list, 1, 4, 6, 'b', 'green');
+    expect(list.map((h) => (h.kind === 'words' ? `${h.start}-${h.end}:${h.color}` : ''))).toEqual(['0-3:pink', '4-6:green']);
+    list = addWordRange(list, 1, 7, 8, 'c', 'green');
+    expect(list.length).toBe(2);
+    expect(addWordRange([], 1, 0, 1, 'd', 'yellow')[0]).not.toHaveProperty('color');
+  });
+});

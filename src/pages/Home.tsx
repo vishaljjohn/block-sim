@@ -4,7 +4,7 @@ import { db } from '../db';
 import type { Attempt, Exam } from '../types';
 import { buildMissedBank, dueRows } from '../lib/missed';
 import { scoreAttempt } from '../lib/score';
-import { deleteExam, getSettings } from '../lib/store';
+import { deleteAttempt, deleteExam, getSettings } from '../lib/store';
 import { folderStatus, onFolderStatus, reconnectFolder } from '../lib/folder';
 import { exportBackup } from '../lib/backup';
 import { downloadBlob } from '../lib/csv';
@@ -84,6 +84,7 @@ export function Home() {
             <span key={a.id} className="ml-3 inline-flex items-center gap-2">
               {a.name} ({a.items.filter((i) => i.answer).length}/{a.items.length} answered)
               <button className="btn-primary py-0.5" onClick={() => go(`/test/${a.id}`)} data-testid="resume-block">Resume</button>
+              <button className="btn py-0.5" data-testid="discard-block" onClick={() => window.confirm(`Discard the unfinished block “${a.name}”? Its answers are deleted and it will not count in your history.`) && void deleteAttempt(a.id)}>Discard</button>
             </span>
           ))}
         </div>

@@ -138,6 +138,11 @@ export function Redo({ qids }: { qids: string[] }) {
             <span className="text-base font-bold" style={{ color: done.correct ? '#15803d' : '#dc2626' }} data-testid="redo-result">
               {done.correct ? 'Correct' : `Incorrect: the answer is ${q.answer}`}
             </span>
+            {row && (
+              <span className="text-sm text-gray-700" data-testid="redo-next-due">
+                {row.schedule.status === 'Mastered' ? 'Mastered: right on two different days. It leaves your review list.' : row.schedule.dueAt ? `Next review: ${fmtDate(row.schedule.dueAt)}${done.correct ? (row.schedule.correctStreakDays === 1 ? ' · one more correct redo on another day masters it' : '') : ' (missed again, so it comes back in 3 days)'}` : ''}
+              </span>
+            )}
             <button className="btn-primary" onClick={next} data-testid="redo-next" autoFocus>
               {i + 1 < items.length ? 'Next question' : 'Finish'}
             </button>

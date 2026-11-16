@@ -70,3 +70,35 @@ test('two-column PDF with choices up to H', async ({ page }) => {
   await page.keyboard.press('g');
   await expect(page.getByTestId('choice-G')).toHaveAttribute('data-selected', '1');
 });
+
+test('key that marks answers only with a highlight', async ({ page }) => {
+  await freshStart(page);
+  await importExam(page, { file: 'a-image-questions.pdf', name: 'Highlight key', key: { pdf: 'e-highlight-key.pdf' }, layout: 'fixed', perQuestion: 1 });
+  await expect(page.getByTestId('keyed-count')).toHaveText(String(answers.a.length));
+  for (let i = 0; i < answers.a.length; i++) await expect(page.getByTestId(`key-answer-${i + 1}`)).toHaveValue(answers.a[i]);
+  // the explanation is what follows the choices, not the repeated question
+  expect(await page.getByTestId('key-expl-1').inputValue()).toMatch(/preferred in this made-up scenario/);
+  expect(await page.getByTestId('key-expl-1').inputValue()).not.toMatch(/year-old/);
+});
+
+test('a picture in the question can be popped out and zoomed', async ({ page }) => {
+  await freshStart(page);
+  await importExam(page, { file: 'b-answer-after.pdf', name: 'With image', key: { inline: true }, layout: 'auto' });
+  await confirmKey(page);
+  await startBlock(page, { mode: 'exam' });
+  await page.getByTestId('zoom-image').first().click();
+  await expect(page.getByTestId('image-zoom')).toBeVisible();
+  const before = (await page.getByTestId('zoom-canvas').boundingBox())!.width;
+  await page.getByTestId('zoom-img-in').click();
+  await page.getByTestId('zoom-img-in').click();
+  await expect(page.getByTestId('zoom-img-level')).toHaveText('150%');
+  expect((await page.getByTestId('zoom-canvas').boundingBox())!.width).toBeGreaterThan(before * 1.4);
+  await page.getByTestId('zoom-img-out').click();
+  await expect(page.getByTestId('zoom-img-level')).toHaveText('125%');
+  await page.getByRole('button', { name: 'Close Image' }).click();
+  await expect(page.getByTestId('image-zoom')).toHaveCount(0);
+  // questions without pictures have no zoom button
+  await page.getByTestId('next').click();
+  await expect(page.getByTestId('choice-A')).toBeVisible();
+  await expect(page.getByTestId('zoom-image')).toHaveCount(0);
+});

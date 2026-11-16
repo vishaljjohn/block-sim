@@ -10,6 +10,7 @@ import { getSettings, wipeEverything } from '../lib/store';
 import { fmtDateTime, useLive } from '../ui/hooks';
 import { H1, H2 } from '../ui/Shell';
 import { Modal } from '../ui/panels';
+import { DisplaySettings } from '../ui/DisplaySettings';
 import { backupFileName, useFolderStatus } from './Home';
 
 function fmtBytes(n: number | undefined): string {
@@ -51,6 +52,11 @@ export function SettingsPage() {
     <div data-testid="settings">
       <H1>Settings</H1>
       {msg && <div className="mb-3 border border-gray-500 bg-gray-50 p-2 text-sm" role="status" data-testid="settings-msg">{msg}</div>}
+
+      <H2>Display</H2>
+      <div className="max-w-md">
+        <DisplaySettings />
+      </div>
 
       <H2>Data folder (automatic saving)</H2>
       <div className="text-sm" data-testid="folder-section">
@@ -101,7 +107,7 @@ export function SettingsPage() {
               setMsg('Restoring…');
               try {
                 const r = await restoreBackup(f);
-                setMsg(`Restored: ${r.exams} exam(s), ${r.attempts} attempt(s), ${r.pdfs} PDF(s). Existing data was kept and merged.`);
+                setMsg(`Restored from the backup: ${r.exams} exam(s) and ${r.attempts} attempt(s)${r.pdfs ? `, ${r.pdfs} PDF(s) copied back` : ''}. Nothing on this device was removed.`);
                 refreshUsage();
               } catch (er) {
                 setMsg('Restore failed: ' + String((er as Error)?.message ?? er) + '. Your current data was not changed.');
@@ -127,17 +133,17 @@ export function SettingsPage() {
                     <button
                       className="btn py-0"
                       onClick={async () => {
-                        if (!window.confirm('Merge this snapshot back into your data? Nothing is deleted; anything missing is restored.')) return;
+                        if (!window.confirm('Bring back the answers, notes and keys saved in this snapshot? Nothing is deleted or replaced: anything missing comes back (PDFs are not in snapshots).')) return;
                         const d = JSON.parse(s.data) as { exams: { id: string }[]; attempts: { id: string }[]; reviews: { examId: string }[] };
                         const json = new Map<string, unknown>();
                         d.exams.forEach((x) => json.set(`exams/${x.id}.json`, x));
                         d.attempts.forEach((x) => json.set(`attempts/${x.id}.json`, x));
                         json.set('reviews/all.json', d.reviews);
-                        await mergeIntoDb({ json, bin: new Map() });
+                        await mergeIntoDb({ json, bin: new Map() }, { resurrect: true });
                         setMsg('Snapshot merged.');
                       }}
                     >
-                      Restore
+                      Bring back
                     </button>
                   </td>
                 </tr>
