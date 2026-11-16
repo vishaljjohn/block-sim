@@ -4,7 +4,7 @@ Free practice-exam app for medical students. Load **any** question PDF and its a
 board-style test screen. Every attempt is saved, so you can come back weeks or months later and review what you
 missed.
 
-- **Open it:** https://vishaljjohn.github.io/block-sim/
+- **Open it:** https://www.vishaljohn.com/block-sim/
 - Works best in **Chrome or Edge on a laptop**. Also works in Safari and on iPad (touch).
 - Nothing you load ever leaves your computer. No accounts, no uploads, no tracking. It works offline once opened.
 
@@ -136,7 +136,7 @@ update instead; roll back only to a tag with the same `DB_VERSION`.
 
 ### Test against the live site
 ```bash
-BASE_URL=https://vishaljjohn.github.io/block-sim/ npx playwright test
+BASE_URL=https://www.vishaljohn.com/block-sim/ npx playwright test
 ```
 
 ### Local-only tests with private PDFs

@@ -104,8 +104,8 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     go(`/test/${a.id}`);
   };
 
-  const R = ({ v, children, testId }: { v: Sel; children: React.ReactNode; testId?: string }) => (
-    <label className="block">
+  const R = (v: Sel, testId: string, children: React.ReactNode) => (
+    <label className="block" key={v}>
       <input type="radio" name="sel" checked={sel === v} onChange={() => setSel(v)} data-testid={testId} /> {children}
     </label>
   );
@@ -119,22 +119,22 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
         <>
           <H2>Questions</H2>
           <div className="space-y-1 text-sm">
-            <R v="all" testId="sel-all">All {exam!.questions.length} questions</R>
-            <R v="range" testId="sel-range">
+            {R('all', 'sel-all', <>All {exam!.questions.length} questions</>)}
+            {R('range', 'sel-range', <>
               Range: from
               <input className="field mx-1 w-16" type="number" min={1} max={exam!.questions.length} value={from} onChange={(e) => { setFrom(parseInt(e.target.value, 10) || 1); setSel('range'); }} data-testid="range-from" />
               to
               <input className="field mx-1 w-16" type="number" min={1} max={exam!.questions.length} value={to} onChange={(e) => { setTo(parseInt(e.target.value, 10) || 1); setSel('range'); }} data-testid="range-to" />
-            </R>
-            <R v="random" testId="sel-random">
+            </>)}
+            {R('random', 'sel-random', <>
               Random
               <input className="field mx-1 w-16" type="number" min={1} max={exam!.questions.length} value={randomN} onChange={(e) => { setRandomN(Math.max(1, parseInt(e.target.value, 10) || 1)); setSel('random'); }} data-testid="random-n" />
               questions
-            </R>
-            <R v="missed" testId="sel-missed">Missed only ({exam!.questions.filter((q) => missedIds.has(q.id)).length})</R>
-            <R v="marked" testId="sel-marked">Marked only ({exam!.questions.filter((q) => markedIds.has(q.id)).length})</R>
-            {allTags.length > 0 && (
-              <R v="tag" testId="sel-tag">
+            </>)}
+            {R('missed', 'sel-missed', <>Missed only ({exam!.questions.filter((q) => missedIds.has(q.id)).length})</>)}
+            {R('marked', 'sel-marked', <>Marked only ({exam!.questions.filter((q) => markedIds.has(q.id)).length})</>)}
+            {allTags.length > 0 &&
+              R('tag', 'sel-tag', <>
                 By tag:
                 <span className="ml-1 inline-flex flex-wrap gap-1">
                   {allTags.map((t) => (
@@ -143,8 +143,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
                     </button>
                   ))}
                 </span>
-              </R>
-            )}
+              </>)}
           </div>
         </>
       )}
