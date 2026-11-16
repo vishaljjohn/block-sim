@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { answers, confirmKey, fixture, freshStart, importExam, itemState, startBlock } from './helpers';
+import { answers, confirmKey, fixture, freshStart, importExam, itemState, pick as pickAnswer, startBlock } from './helpers';
 
 const isTouch = (name: string) => name === 'ipad';
 
@@ -92,10 +92,7 @@ test('pasted key + tutor mode reveals answers immediately', async ({ page }) => 
   await expect(page.getByTestId('keyed-count')).toHaveText(/\d+/);
   await confirmKey(page);
   await startBlock(page, { mode: 'tutor' });
-  const has = async (id: string) => (await page.getByTestId(id).count()) > 0;
-  const first = answers.d[0];
-  if (await has(`bubble-${first}`)) await page.getByTestId(`bubble-${first}`).click();
-  else await page.getByTestId(`choice-${first}`).click();
+  await pickAnswer(page, answers.d[0]);
   await page.getByTestId('submit').click();
   await expect(page.getByTestId('result-word')).toHaveText(/Correct|Incorrect/);
   await expect(page.getByTestId('explanation-panel')).toBeVisible();
@@ -105,7 +102,7 @@ test('backup, wipe, restore', async ({ page }) => {
   await freshStart(page);
   await page.goto('./#/exam/demo-exam');
   await startBlock(page, { mode: 'untimed' });
-  await page.getByTestId('bubble-B').click();
+  await pickAnswer(page, 'B');
   await page.getByTestId('end-block').click();
   await page.getByTestId('grid-end').click();
   await page.getByTestId('confirm-end').click();
@@ -183,4 +180,21 @@ test('missing answers are flagged on the key check screen', async ({ page }) => 
   await page.getByTestId('key-answer-1').fill('c');
   await expect(page.getByTestId('key-answer-1')).toHaveValue('C');
   void fixture;
+});
+
+test('timer: a sleep gap over 60 s auto-pauses at the moment it went away, and resumes from there', async ({ page }) => {
+  await page.clock.install();
+  await freshStart(page);
+  await page.goto('./#/exam/demo-exam');
+  await startBlock(page, { mode: 'exam' });
+  await page.clock.runFor(5000);
+  const before = await page.getByTestId('timer-value').textContent();
+  // the computer "sleeps" for 10 minutes: no ticks, then the wall clock jumps
+  await page.clock.setSystemTime(Date.now() + 10 * 60_000);
+  await expect(page.getByTestId('paused-screen')).toContainText('away', { timeout: 10_000 });
+  await page.getByTestId('resume').click();
+  const after = await page.getByTestId('timer-value').textContent();
+  const secs = (s: string | null) => s!.split(':').reduce((a, b) => a * 60 + Number(b), 0);
+  // nothing was lost while asleep (a second or two of slack for the tick)
+  expect(Math.abs(secs(after) - secs(before))).toBeLessThanOrEqual(3);
 });

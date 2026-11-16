@@ -161,3 +161,36 @@ export function intersect(a: Rect, b: Rect): Rect {
   const y = Math.max(a.y, b.y);
   return { x, y, w: Math.max(0.01, Math.min(a.x + a.w, b.x + b.w) - x), h: Math.max(0.01, Math.min(a.y + a.h, b.y + b.h) - y) };
 }
+
+/**
+ * Which choice is highlighted (yellow or green marker behind the text)? Keys that mark the answer only by
+ * highlighting it. Returns the letter when one choice clearly stands out.
+ */
+export function highlightedChoice(px: Pixels, choices: { letter: string; x: number; y: number; w: number; h: number }[]): string | null {
+  const { data, width: W, height: H } = px;
+  const score = choices.map((c) => {
+    const x0 = Math.max(0, Math.floor(c.x * W));
+    const x1 = Math.min(W - 1, Math.ceil((c.x + c.w) * W));
+    const y0 = Math.max(0, Math.floor(c.y * H));
+    const y1 = Math.min(H - 1, Math.ceil((c.y + c.h) * H));
+    let n = 0;
+    let hit = 0;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = (y * W + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        n++;
+        const yellow = r > 190 && g > 180 && b < 140 && Math.abs(r - g) < 70;
+        const green = g > 150 && r < 170 && b < 170 && g - Math.max(r, b) > 40;
+        if (yellow || green) hit++;
+      }
+    return n ? hit / n : 0;
+  });
+  let best = -1;
+  for (let i = 0; i < score.length; i++) if (best < 0 || score[i] > score[best]) best = i;
+  if (best < 0) return null;
+  const second = Math.max(0, ...score.filter((_, i) => i !== best));
+  return score[best] > 0.12 && score[best] > second * 3 ? choices[best].letter : null;
+}

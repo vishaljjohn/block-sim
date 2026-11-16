@@ -14,6 +14,10 @@ export interface KeyLine {
 
 export interface KeyEntry {
   n: number;
+  /** page the entry starts on (keys read from PDFs) */
+  page?: number;
+  /** raw lines, kept for entries with no answer letter so the answer can be found another way (highlight) */
+  raw?: string[];
   answer: string;
   /** set when the key gives the answer as choice text rather than a letter */
   answerText?: string;
@@ -28,17 +32,18 @@ export interface ParsedKey {
 }
 
 const DASH = '\\-–—';
-const PAIR_RE = new RegExp(`^(?:Q(?:uestion)?\\.?\\s*|#\\s*)?(\\d{1,3})\\s*(?:[.):=|]|[${DASH}]|\\s)\\s*(?:(?:correct\\s+)?(?:answer|ans)\\.?\\s*(?:is)?\\s*[:=${DASH}]?\\s*)?\\(?([A-Za-z])\\)?(.*)$`, 'i');
-const STEM_RE = /^(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*(?:[.):]|\s[-–—]\s)\s*(.*)$/i;
+const PAIR_RE = new RegExp(`^(?:Q(?:uestion)?\\.?\\s*|#\\s*)?(\\d{1,3})\\s*(?:[.):=|]|[${DASH}]|\\s)\\s*(?:(?:correct\\s*)?(?:answer|ans)\\.?\\s*(?:is)?\\s*[:=${DASH}]?\\s*)?\\(?([A-Za-z])\\)?(.*)$`, 'i');
+// up to 3 stray symbols before the number (✓/✗ marks and icons read as "~", ")(", "»")
+const STEM_RE = /^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*(?:[.):](?![\d,])|\s[-–—]\s)\s*(.*)$/i; // "36.9°C" is a number, not item 36
 const BARE_NUM_RE = /^(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*[.):]?$/i;
 export const ANSWER_RE = new RegExp(
-  `^[•*\\-\\s]*(?:the\\s+)?(?:correct\\s+answer|correct\\s+choice|correct\\s+response|answer|ans|key)\\.?\\s*(?:is|was)?\\s*[:=${DASH}]?\\s*\\(?([A-Za-z])\\)?(?=$|[\\s.,;:)${DASH}])\\s*[.):,;${DASH}]?\\s*(.*)$`,
+  `^[•*\\-\\s]*(?:the\\s+)?(?:correct\\s*answers?|correct\\s*choice|correct\\s*response|answer|ans|key)\\.?\\s*(?:is|was)?\\s*[:=${DASH}]?\\s*\\(?([A-Za-z])\\)?(?=$|[\\s.,;:)${DASH}])\\s*[.):,;${DASH}]?\\s*(.*)$`,
   'i',
 );
-const ANSWER_TEXT_RE = /^[•*\-\s]*(?:the\s+)?(?:correct\s+answer|answer)\s*(?:is\s*:?|[:=])\s*(.{3,})$/i;
+const ANSWER_TEXT_RE = /^[•*\-\s]*(?:the\s+)?(?:correct\s*answer|answer)\s*(?:is\s*:?|[:=])\s*(.{3,})$/i;
 export const ITEM_OF_RE = /\b(?:item|question|q)\s*[:#]?\s*(\d{1,3})\s+of\s+(\d{1,3})\b/i;
 const TAG_LINE_RE = /^(.*?[A-Za-z].*?)\s*[:\-–—]\s*((?:\d{1,3}\s*,\s*)+\d{1,3})\s*,?\s*$/;
-const AFTER_LETTER_OK = new RegExp(`^(?:$|[.),:;|${DASH}])`);
+const AFTER_LETTER_OK = new RegExp(`^\\s*(?:$|[.),:;|${DASH}])`);
 
 interface PairMatch {
   n: number;
@@ -65,6 +70,8 @@ export function matchPair(text: string): PairMatch | null {
   if (after === '') return { n, letter: letter.toUpperCase(), rest: '' };
   const nextPair = matchPair(after);
   if (nextPair) return { n, letter: letter.toUpperCase(), rest: after };
+  // "6.e Uncal herniation": a lowercase letter glued to the number, then a capitalised explanation
+  if (!upper && new RegExp(`^(?:Q(?:uestion)?\\.?\\s*|#\\s*)?${n}[.)]${letter}\\s+[A-Z(]`).test(text.trim())) return { n, letter: letter.toUpperCase(), rest: after };
   if (!upper) return null; // "1. a patient…"
   if ((letter === 'A' || letter === 'I') && /^[a-z0-9]/.test(after)) return null; // "1. A 19-year-old…"
   if (/^\s{2,}|^\t/.test(rest) || /^[A-Z("']/.test(after) || /^[a-z]/.test(after)) return { n, letter, rest: after };
@@ -103,6 +110,7 @@ function joinParagraphs(buf: string[]): string {
 
 interface Work {
   n: number;
+  page?: number;
   answer: string;
   answerText?: string;
   buf: string[];
@@ -168,7 +176,7 @@ function runNumbered(lines: KeyLine[], startAt: number, forceStem: boolean): Par
     return false;
   };
   const open = (n: number, answer: string, line: KeyLine, stem: boolean): Work => {
-    const w: Work = { n, answer, buf: [], conf: line.conf ?? 1, stem };
+    const w: Work = { n, answer, buf: [], conf: line.conf ?? 1, stem, page: line.page };
     done.push(w);
     seen.add(n);
     cur = w;
@@ -189,7 +197,8 @@ function runNumbered(lines: KeyLine[], startAt: number, forceStem: boolean): Par
       if (n > curN && n <= lastN() + 6 && !seen.has(n)) pendingHint = n;
       // the hint is page furniture, never explanation text
       text = text.replace(ITEM_OF_RE, '').trim();
-      if (text.length < 40) continue;
+      // what is left may still be a question number ("3. Item 1 of 2" in a two-question set)
+      if (text.length < 40 && !(STEM_RE.test(text) || matchPair(text))) continue;
     }
 
     const pairs = isPurePairs(text);
@@ -282,6 +291,8 @@ function runNumbered(lines: KeyLine[], startAt: number, forceStem: boolean): Par
     .map((w) => {
       const explanation = joinParagraphs(w.buf);
       const e: KeyEntry = { n: w.n, answer: w.answer, explanation, conf: w.conf };
+      if (w.page != null) e.page = w.page;
+      if (!w.answer) e.raw = w.buf;
       if (w.answerText) e.answerText = w.answerText;
       else if (!w.answer && w.stem && explanation && explanation.length <= 90 && !explanation.includes('\n')) {
         // "12. Lisinopril": answer given as choice text
@@ -355,6 +366,15 @@ function parseLoose(lines: KeyLine[]): ParsedKey {
     return { entries: joined.split('').map((t, i) => ({ n: i + 1, answer: t, explanation: '', conf: 1 })), tags: {}, format: 'letter-list' };
   }
   return { entries: [], tags: {}, format: 'none' };
+}
+
+/** For an entry whose answer was found elsewhere (a highlight): drop the repeated stem and choices, keep what follows. */
+export function explanationAfterChoices(raw: string[]): string {
+  let last = -1;
+  raw.forEach((l, i) => {
+    if (/^(?:[^\w\s]{0,3}\s*)?(?:\(?[A-Za-z]\)|[A-Za-z][.)])\s+\S/.test(l.trim())) last = i;
+  });
+  return joinParagraphs(last >= 0 ? raw.slice(last + 1) : raw);
 }
 
 export function parseKeyText(text: string, opts: ParseOptions = {}): ParsedKey {

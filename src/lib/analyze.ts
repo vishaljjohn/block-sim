@@ -7,10 +7,10 @@ import { db } from '../db';
 import type { Exam, PageText, Question, Rect, Word } from '../types';
 import type { ParsedKey } from './keyParser';
 import { resolveAnswerText } from './keyParser';
-import { blankQuestion, fixedLayout, type WordsProvider } from './importer';
+import { blankQuestion, fixedLayout, type HighlightReader, type WordsProvider } from './importer';
 import { examPdf, hasRealText, pageHasImage, pageWords, renderToCanvas, type PdfDoc } from './pdf';
 import { mergeWords } from './pdfWords';
-import { detectCrop } from './crop';
+import { detectCrop, highlightedChoice } from './crop';
 import { detectChoices, detectLayout, linesForSegment, pageLines, readingOrder, type PageLines } from './detect';
 import { ocrCanvas } from './ocr';
 import { saveExam, savePageTexts } from './store';
@@ -25,6 +25,8 @@ export interface AnalyzeOptions {
   skip: number[];
   /** set by the import screen's "Skip" button: stop waiting for OCR and use what is ready */
   cancel?: { cancelled: boolean };
+  /** number of answers in the key, when known: a strong hint for how many questions there are */
+  expectedCount?: number;
 }
 export interface AnalyzeResult {
   questions: Question[];
@@ -47,8 +49,27 @@ async function cropPixels(doc: PdfDoc, page: number): Promise<{ data: Uint8Clamp
   return { data: img.data, width: c.width, height: c.height };
 }
 
+/** At most a few pages are rendered/recognized at once: big scanned PDFs must not render every page in parallel. */
+let active = 0;
+const waiters: (() => void)[] = [];
+async function slot<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= 4) await new Promise<void>((r) => waiters.push(r));
+  active++;
+  try {
+    return await fn();
+  } finally {
+    active--;
+    waiters.shift()?.();
+  }
+}
+
 /** Read one page: real PDF text when present, otherwise OCR. Includes auto-crop. */
-export async function processPage(examId: string | null, doc: PdfDoc, page: number, allowOcr = true): Promise<PageText | null> {
+export function processPage(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean | (() => boolean) = true): Promise<PageText | null> {
+  // decided when the page's turn comes, so "Skip waiting" also stops pages that were already queued
+  return slot(() => processPageNow(examId, doc, page, typeof allowOcr === 'function' ? allowOcr() : allowOcr));
+}
+
+async function processPageNow(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean): Promise<PageText | null> {
   const pg = await doc.getPage(page);
   let words: Word[] = await pageWords(pg);
   let source: PageText['source'] = 'pdf';
@@ -85,6 +106,19 @@ async function finish(examId: string | null, doc: PdfDoc, page: number, input: W
   return { id: `${examId ?? 'tmp'}:${page}`, examId: examId ?? 'tmp', page, source, words, autoCrop, conf };
 }
 
+/** Key pages that mark the answer with a highlight: find the choices, then the one with color behind it. */
+export const highlightReader: HighlightReader = async (doc, page, words) => {
+  const pl = pageLines(page, words);
+  const d = detectChoices(pl.lines, page, null, words);
+  if (d.choices.length < 2) return null;
+  const pg = await doc.getPage(page);
+  const c = await renderToCanvas(pg, 900);
+  const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+  const out = highlightedChoice({ data: img.data, width: c.width, height: c.height }, d.choices);
+  c.width = c.height = 1;
+  return out;
+};
+
 /** Words provider for reading answer keys: PDF text, else OCR (key PDFs are not cached). */
 export function wordsProvider(examId: string | null): WordsProvider {
   return async (doc, page) => {
@@ -115,7 +149,7 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
   const jobs = pages.map(async (p) => {
     if (opts.cancel?.cancelled) return;
     const cached = await db.pages.get(`${exam.id}:${p}`);
-    const pt = cached ?? (await processPage(exam.id, doc, p, !opts.cancel?.cancelled).catch((e) => (logError('page ' + p, e), null)));
+    const pt = cached ?? (await processPage(exam.id, doc, p, () => !opts.cancel?.cancelled).catch((e) => (logError('page ' + p, e), null)));
     if (pt) {
       if (pt.source === 'ocr') anyOcr = true;
       texts.set(p, pt);
@@ -131,7 +165,15 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
   const pls = pages.map((p) => texts.get(p)).filter((t): t is PageText => !!t).map(toPageLines);
   if (opts.auto || opts.inlineAnswers) {
     const lay = detectLayout(pls, { inlineAnswers: opts.inlineAnswers });
-    const enough = lay.questions.length >= 2 && (lay.multiPerPage || lay.confidence >= 0.3 || lay.questions.length >= pages.length * 0.3);
+    let enough = lay.questions.length >= 2 && (lay.multiPerPage || lay.confidence >= 0.3 || lay.questions.length >= pages.length * 0.3);
+    // the key says how many questions there are: when whole pages divide evenly into that many questions and
+    // the page text disagrees, trust the page count (screenshots without readable question numbers)
+    const n = opts.expectedCount ?? 0;
+    if (opts.auto && n >= 2 && lay.questions.length !== n && pages.length % n === 0 && !lay.multiPerPage) {
+      const per = pages.length / n;
+      questions = fixedLayout(exam.id, { pagesPerQuestion: per, startPage: opts.startPage, endPage: opts.endPage, skip: opts.skip });
+      enough = false;
+    }
     if (opts.auto && enough) {
       questions = lay.questions.map((d, i) => {
         const q = blankQuestion(exam.id, i + 1, []);

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { freshStart, startBlock } from './helpers';
+import { freshStart, pick, startBlock } from './helpers';
 
 const DAY = 86_400_000;
 
@@ -8,10 +8,8 @@ test('missed bank, redo, spaced schedule and "Due for review"', async ({ page })
   await page.goto('./#/exam/demo-exam');
   await startBlock(page, { mode: 'untimed' });
   // demo answers: B C B D B → answer A everywhere: all wrong except none
-  const has = async (id: string) => (await page.getByTestId(id).count()) > 0;
   for (let n = 1; n <= 5; n++) {
-    if (await has('bubble-A')) await page.getByTestId('bubble-A').click();
-    else await page.getByTestId('choice-A').click();
+    await pick(page, 'A');
     if (n < 5) await page.getByTestId('next').click();
   }
   await page.getByTestId('end-block').click();
@@ -41,8 +39,7 @@ test('missed bank, redo, spaced schedule and "Due for review"', async ({ page })
   await expect(page.getByTestId('redo-page')).toBeVisible();
   await expect(page.locator('[data-drawn="1"]').first()).toBeVisible();
   // redo Q1 correctly (B)
-  if (await has('bubble-B')) await page.getByTestId('bubble-B').click();
-  else await page.getByTestId('choice-B').click();
+  await pick(page, 'B');
   await page.getByTestId('redo-submit').click();
   await expect(page.getByTestId('redo-result')).toHaveText('Correct');
   await expect(page.getByTestId('redo-explanation')).toBeVisible();
@@ -57,8 +54,7 @@ test('missed bank, redo, spaced schedule and "Due for review"', async ({ page })
   await page.reload();
   await expect(page.getByTestId('redo-page')).toBeVisible();
   await expect(page.locator('[data-drawn="1"]').first()).toBeVisible();
-  if (await has('bubble-B')) await page.getByTestId('bubble-B').click();
-  else await page.getByTestId('choice-B').click();
+  await pick(page, 'B');
   await page.getByTestId('redo-submit').click();
   await page.goto('./#/missed');
   await page.getByTestId('f-status').selectOption('all');

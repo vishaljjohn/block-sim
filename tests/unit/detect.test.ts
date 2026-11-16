@@ -171,3 +171,50 @@ describe('auto-crop', () => {
     expect(detectCrop({ data, width: W, height: H })).toEqual({ x: 0, y: 0, w: 1, h: 1 });
   });
 });
+
+describe('answer marked by a highlight', () => {
+  it('picks the choice with yellow behind it', async () => {
+    const { highlightedChoice } = await import('../../src/lib/crop');
+    const W = 100;
+    const H = 100;
+    const data = new Uint8ClampedArray(W * H * 4).fill(255);
+    for (let y = 40; y < 48; y++) for (let x = 10; x < 60; x++) data.set([255, 240, 40, 255], (y * W + x) * 4);
+    const ch = ['A', 'B', 'C'].map((letter, i) => ({ letter, x: 0.1, y: 0.3 + i * 0.1, w: 0.5, h: 0.08 }));
+    expect(highlightedChoice({ data, width: W, height: H }, ch)).toBe('B');
+    expect(highlightedChoice({ data: new Uint8ClampedArray(W * H * 4).fill(255), width: W, height: H }, ch)).toBeNull();
+  });
+  it('keeps only the explanation after the repeated stem and choices', async () => {
+    const { explanationAfterChoices } = await import('../../src/lib/keyParser');
+    expect(explanationAfterChoices(['1. A man has a cough.', 'A) One', 'B) Two', 'This is why.', '', 'More.'])).toBe('This is why.\n\nMore.');
+  });
+});
+
+describe('numbering search', () => {
+  const p = (n: number, lines: [number, number, string][]) => pageLines(n, words(lines));
+  const ch = (y: number): [number, number, string][] => [[0.07, y, 'A) one'], [0.07, y + 0.03, 'B) two'], [0.07, y + 0.06, 'C) three']];
+  it('unnumbered one-question-per-page screenshots: each new set of choices is a new question, and a stray "1." later does not restart the count', () => {
+    const pages = [1, 2, 3, 4].map((n) => p(n, [[0.05, 0.1, 'A woman has a problem and more words here'], ...ch(0.2)]));
+    pages.push(p(5, [[0.05, 0.1, '1. Lab list item that is not a question'], ...ch(0.2)]));
+    const lay = detectLayout(pages);
+    expect(lay.questions.map((q) => q.segments.map((s) => s.page).join('+'))).toEqual(['1', '2', '3', '4', '5']);
+  });
+  it('numbered questions with choices on the second page stay two-page questions', () => {
+    const pages = [p(1, [[0.05, 0.1, '1. Stem text continues on and on']]), p(2, ch(0.1)), p(3, [[0.05, 0.1, '2. Second stem text goes here']]), p(4, ch(0.1))];
+    const lay = detectLayout(pages);
+    expect(lay.questions.map((q) => q.segments.map((s) => s.page).join('+'))).toEqual(['1+2', '3+4']);
+  });
+});
+
+describe('choices in two side-by-side columns', () => {
+  it('splits "O A) … O G) …" lines into two columns, A–F then G–L', () => {
+    const rows: [number, number, string][] = [];
+    'ABCDEF'.split('').forEach((l, i) => rows.push([0.04, 0.2 + i * 0.03, `O ${l}) Left choice ${l}          O ${String.fromCharCode(l.charCodeAt(0) + 6)}) Right choice`]));
+    const w = words(rows).map((x) => x);
+    // put the right half far to the right
+    for (const x of w) if (x.x > 0.2) x.x += 0.3;
+    const d = detectChoices(buildLines(w), 1, null, w);
+    expect(d.choices.map((c) => c.letter).join('')).toBe('ABCDEFGHIJKL');
+    expect(d.choices[6].x).toBeGreaterThan(d.choices[0].x + 0.2);
+    expect(d.choices[0].x + d.choices[0].w).toBeLessThan(d.choices[6].x);
+  });
+});

@@ -3,7 +3,7 @@ import { db } from '../db';
 import type { Exam, PageText, Question } from '../types';
 import { regrade } from '../lib/attempt';
 import { applyKey, blankQuestion, formatPageList, keyWarnings, parsePageList, readKeyFromPdf, readKeyFromText } from '../lib/importer';
-import { wordsProvider } from '../lib/analyze';
+import { highlightReader, wordsProvider } from '../lib/analyze';
 import { examPdf, openPdf, type PdfDoc } from '../lib/pdf';
 import { saveAttempt, saveExam } from '../lib/store';
 import { go, useLive, useRoute } from '../ui/hooks';
@@ -58,7 +58,16 @@ export function KeyCheck({ examId }: { examId: string }) {
     row?.querySelector<HTMLInputElement>('input')?.focus();
   };
   const save = async (confirm: boolean) => {
-    const e2: Exam = { ...exam, keyChecked: confirm ? true : exam.keyChecked };
+    // keep choice regions that background text recognition added while this screen was open
+    const latest = await db.exams.get(exam.id);
+    const byId = new Map((latest?.questions ?? []).map((q) => [q.id, q]));
+    const sameSegs = (a: Question, b: Question) => JSON.stringify(a.segments) === JSON.stringify(b.segments);
+    const questions = exam.questions.map((q) => {
+      const l = byId.get(q.id);
+      if (!l || q.choiceSource === 'manual' || !sameSegs(q, l)) return q;
+      return { ...q, choices: l.choices, choiceSource: l.choiceSource, choiceTexts: l.choiceTexts, choiceCount: Math.max(q.choiceCount, l.choices?.length ?? 0) };
+    });
+    const e2: Exam = { ...exam, questions, textStatus: latest?.textStatus ?? exam.textStatus, keyChecked: confirm ? true : exam.keyChecked };
     await saveExam(e2);
     // history is re-graded with the corrected key
     const attempts = await db.attempts.filter((a) => a.items.some((it) => it.examId === e2.id)).toArray();
@@ -213,7 +222,7 @@ export function KeyCheck({ examId }: { examId: string }) {
                   setBusy('Reading the key PDF…');
                   try {
                     const kd = await openPdf(await f.arrayBuffer());
-                    const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the key: page ${d} of ${t}…`));
+                    const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the key: page ${d} of ${t}…`), highlightReader);
                     applyParsed(r.key);
                   } catch (er) {
                     setBusy('Could not read that PDF: ' + String(er));

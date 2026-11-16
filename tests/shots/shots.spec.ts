@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { answers, confirmKey, freshStart, importExam, startBlock } from '../e2e/helpers';
 
 const OUT = process.env.SHOTS ?? 'test-results/shots';
-test.use({ viewport: { width: 1512, height: 945 }, deviceScaleFactor: 1 });
+test.use({ viewport: { width: Number(process.env.VW ?? 1512), height: Number(process.env.VH ?? 945) }, deviceScaleFactor: 1 });
 
 test('screenshots', async ({ page }) => {
   test.setTimeout(240_000);
@@ -39,5 +39,12 @@ test('screenshots', async ({ page }) => {
   await startBlock(page, { mode: 'untimed' });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/7-demo.png` });
+  for (const [name, url] of [['8-home', './#/'], ['9-missed', './#/missed'], ['10-weak', './#/weak'], ['11-settings', './#/settings'], ['12-faq', './#/faq'], ['13-welcome', './#/welcome'], ['14-import', './#/import']]) {
+    await page.goto(url);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+  }
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(overflow).toBe(false);
   void answers;
 });

@@ -1,7 +1,7 @@
 import { SCHEMA_VERSION } from '../config';
 import { uid } from '../db';
 import type { Exam, Question, Word } from '../types';
-import { parseKeyLines, parseKeyText, resolveAnswerText, type KeyEntry, type ParsedKey } from './keyParser';
+import { explanationAfterChoices, parseKeyLines, parseKeyText, resolveAnswerText, type KeyEntry, type ParsedKey } from './keyParser';
 import { hasRealText, pageWords, type PdfDoc } from './pdf';
 import { pagesToKeyLines } from './textLines';
 
@@ -65,7 +65,10 @@ export function newExam(name: string, subject: string, pageCount: number): Exam 
 /** Apply parsed key entries to questions by number. Choice count defaults to the key's highest letter (min 5). */
 export function applyKey(questions: Question[], key: ParsedKey, keepExisting = false): Question[] {
   const byN = new Map<number, KeyEntry>(key.entries.map((e) => [e.n, e]));
-  const offset = key.entries.length && !byN.has(1) ? Math.min(...key.entries.map((e) => e.n)) - 1 : 0;
+  // a key numbered 51–100 for a 50-question PDF lines up with questions 1–50; a key that merely lacks entry 1
+  // must NOT be shifted
+  const nums = key.entries.map((e) => e.n);
+  const offset = nums.length && Math.min(...nums) > questions.length ? Math.min(...nums) - 1 : 0;
   let maxLetter = 4;
   for (const e of key.entries) if (e.answer) maxLetter = Math.max(maxLetter, e.answer.charCodeAt(0) - 65);
   const count = Math.min(26, maxLetter + 1);
@@ -104,7 +107,7 @@ export interface KeyReadResult {
 }
 
 /** Read an answer key out of PDF pages (rebuilding lines by position). */
-export async function readKeyFromPdf(doc: PdfDoc, fromPage: number, toPage: number, provider: WordsProvider, onProgress?: (done: number, total: number) => void): Promise<KeyReadResult> {
+export async function readKeyFromPdf(doc: PdfDoc, fromPage: number, toPage: number, provider: WordsProvider, onProgress?: (done: number, total: number) => void, highlight?: HighlightReader): Promise<KeyReadResult> {
   const total = toPage - fromPage + 1;
   let done = 0;
   // pages are read in parallel (OCR runs through a small worker pool) and put back in order
@@ -117,8 +120,28 @@ export async function readKeyFromPdf(doc: PdfDoc, fromPage: number, toPage: numb
     }),
   );
   const withText = pages.filter((p) => p.words.length).length;
-  return { key: parseKeyLines(pagesToKeyLines(pages)), pagesWithText: withText, pagesTotal: total };
+  const key = parseKeyLines(pagesToKeyLines(pages));
+  // entries with no answer letter: the key may mark the answer by highlighting the choice
+  if (highlight) {
+    const byPage = new Map(pages.map((p) => [p.page, p.words]));
+    for (const e of key.entries) {
+      if (e.answer || e.page == null) continue;
+      const words = byPage.get(e.page);
+      if (!words?.length) continue;
+      const letter = await highlight(doc, e.page, words).catch(() => null);
+      if (letter) {
+        e.answer = letter;
+        e.conf = Math.min(e.conf, 0.85);
+        if (e.raw) e.explanation = explanationAfterChoices(e.raw);
+        delete e.answerText;
+      }
+    }
+  }
+  return { key, pagesWithText: withText, pagesTotal: total };
 }
+
+/** Finds a highlighted answer choice on a key page (browser: renders the page). */
+export type HighlightReader = (doc: PdfDoc, page: number, words: Word[]) => Promise<string | null>;
 
 export function readKeyFromText(text: string): ParsedKey {
   return parseKeyText(text);

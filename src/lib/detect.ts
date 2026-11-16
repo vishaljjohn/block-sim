@@ -13,7 +13,7 @@ export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 /** Optional radio-button glyph that OCR reads in front of a choice letter. */
 const RADIO = '(?:[O0o©®○◯●◉◎@¤]\\s*|[(\\[]\\s*[)\\]]\\s*)?';
 const CHOICE_RE = new RegExp(`^${RADIO}(?:\\(([A-Za-z])\\)|([A-Za-z])\\s?[.):])(?:\\s+|$)(.*)$`);
-const START_RES = [/^(?:Q(?:uestion)?\s*#?\s*)?(\d{1,3})\s*[.):]\s*(\S.*)?$/i, /^Question\s*#?\s*(\d{1,3})\b(.*)$/i, /^Q\s*(\d{1,3})\b(.*)$/];
+const START_RES = [/^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\s*#?\s*)?(\d{1,3})\s*[.):]\s*(\S.*)?$/i, /^Question\s*#?\s*(\d{1,3})\b(.*)$/i, /^Q\s*(\d{1,3})\b(.*)$/];
 
 export function matchChoiceLabel(text: string): { letter: string; rest: string } | null {
   const m = CHOICE_RE.exec(text.trim());
@@ -23,13 +23,14 @@ export function matchChoiceLabel(text: string): { letter: string; rest: string }
 }
 
 export function matchQuestionStart(text: string): number | null {
-  const t = text.trim();
+  // OCR often reads 1 as l, I or |, and 0 as O, in a number at the start of a line
+  const t = text.trim().replace(/^((?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s+)?([\dlI|O]{1,3})(?=[.)]\s)/, (_m, pre: string | undefined, num: string) => (/\d/.test(num) || num.length === 1 ? (pre ?? '') + num.replace(/[lI|]/g, '1').replace(/O/g, '0') : _m));
   for (const re of START_RES) {
     const m = re.exec(t);
     if (m) {
       const n = parseInt(m[1], 10);
       // "1. A) …" is a choice line, "12.5 mg" is a number
-      if (/^\d{1,3}\.\d/.test(t)) return null;
+      if (/^(?:[^\w\s]{1,3}\s*)?\d{1,3}\.\d/.test(t)) return null;
       return n >= 1 ? n : null;
     }
   }
@@ -85,8 +86,48 @@ export interface ChoiceDetection {
  * Rules: a run of choice lines lettered A, B, C… in order, top to bottom, with left-aligned labels.
  * The last such run in the region wins (choices come after the stem).
  */
+/**
+ * Choices set in two side-by-side columns ("A) … G) …" on one text line): split each such line into a left and a
+ * right part so both columns are found. Right parts get their own column number.
+ */
+function splitChoiceColumns(lines: Line[], words: Word[]): Line[] {
+  const label = /^(?:\(?[A-Za-z]\)|[A-Za-z][.)])$/;
+  const radio = /^[O0o©®○◯●◉◎@¤]$/;
+  const out: Line[] = [];
+  for (const l of lines) {
+    if (!matchChoiceLabel(l.text) || l.idx.length < 4) {
+      out.push({ ...l, column: l.column * 2 });
+      continue;
+    }
+    let cut = -1;
+    for (let k = 2; k < l.idx.length; k++) {
+      const w = words[l.idx[k]];
+      const prev = words[l.idx[k - 1]];
+      if (!label.test(w.t)) continue;
+      const gap = w.x - (prev.x + prev.w);
+      const afterRadio = radio.test(prev.t) && k - 1 >= 2;
+      if (gap > 0.03 || afterRadio) {
+        cut = afterRadio ? k - 1 : k;
+        break;
+      }
+    }
+    if (cut < 0) {
+      out.push({ ...l, column: l.column * 2 });
+      continue;
+    }
+    const part = (idx: number[], column: number): Line => {
+      const ws = idx.map((i) => words[i]);
+      const x = Math.min(...ws.map((w) => w.x));
+      const y = Math.min(...ws.map((w) => w.y));
+      return { text: ws.map((w) => w.t).join(' '), idx, x, y, w: Math.max(...ws.map((w) => w.x + w.w)) - x, h: Math.max(...ws.map((w) => w.y + w.h)) - y, column, conf: Math.min(...ws.map((w) => w.c)) / 100 };
+    };
+    out.push(part(l.idx.slice(0, cut), l.column * 2), part(l.idx.slice(cut), l.column * 2 + 1));
+  }
+  return out;
+}
+
 export function detectChoices(lines: Line[], page: number, region: Rect | null = null, words?: Word[]): ChoiceDetection {
-  const ls = lines.filter((l) => !region || inside(l, region, 0.02)).sort((a, b) => a.column - b.column || a.y - b.y);
+  const ls = (words ? splitChoiceColumns(lines, words) : lines).filter((l) => !region || inside(l, region, 0.02)).sort((a, b) => a.column - b.column || a.y - b.y);
   const cands = ls.map((l, i) => ({ i, l, m: matchChoiceLabel(l.text) })).filter((c) => c.m);
   let best: typeof cands = [];
   for (let s = 0; s < cands.length; s++) {
@@ -101,7 +142,9 @@ export function detectChoices(lines: Line[], page: number, region: Rect | null =
         continue; // a stray line (e.g. continuation) that happens to look like a label
       }
       const sameCol = c.l.column === prev.l.column;
-      const aligned = Math.abs(c.l.x - run[0].l.x) < 0.035 || !sameCol;
+      // labels line up with the first label in the same column
+      const colFirst = run.find((r) => r.l.column === c.l.column) ?? c;
+      const aligned = Math.abs(c.l.x - colFirst.l.x) < 0.035 || !sameCol;
       const below = !sameCol || c.l.y > prev.l.y + prev.l.h * 0.5;
       // choices are close together: a big gap means it is something else
       const gapOk = !sameCol || c.l.y - (prev.l.y + prev.l.h) < Math.max(0.12, prev.l.h * 8);
@@ -201,46 +244,90 @@ interface Start {
  * Pages with text but no new question continue the previous question (multi-page questions).
  */
 export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean } = {}): LayoutResult {
-  const starts: Start[] = [];
-  let expected = 1;
-  const pageStarts = new Map<number, Start[]>();
+  // 1. candidates on every page: numbered lines at the left margin, "Item N of M" headers, and pages that
+  //    hold a full set of choices (a question whose number could not be read)
+  interface Cand {
+    page: number;
+    column: number;
+    y: number;
+    n: number | null;
+    kind: 'num' | 'hint' | 'choices';
+  }
+  const perPage: Cand[][] = [];
   let textPages = 0;
-  let sawChoicesSinceStart = false;
   for (const p of pages) {
-    if (p.lines.length < 2) continue;
-    textPages++;
-    const found: Start[] = [];
-    const hint = p.lines.map((l) => ITEM_OF_RE.exec(l.text)).find(Boolean);
-    const hintN = hint ? parseInt(hint[1], 10) : null;
-    const ordered = [...p.lines].sort((a, b) => a.column - b.column || a.y - b.y);
-    for (const l of ordered) {
-      const n = matchQuestionStart(l.text);
-      if (n == null) continue;
-      const leftOk = l.x <= (p.colLeft[l.column] ?? 0) + 0.06;
-      if (!leftOk) continue;
-      // a start must be the next number; allow skipping one unreadable number when an "Item N" header agrees
-      if (n === expected || (n === expected + 1 && hintN === n)) {
-        found.push({ page: p.page, column: l.column, y: l.y, n, hint: false });
-        expected = n + 1;
+    const cands: Cand[] = [];
+    if (p.lines.length >= 1) {
+      textPages++;
+      const ordered = [...p.lines].sort((a, b) => a.column - b.column || a.y - b.y);
+      for (const l of ordered) {
+        const n = matchQuestionStart(l.text);
+        if (n == null) continue;
+        if (l.x > (p.colLeft[l.column] ?? 0) + 0.06) continue;
+        cands.push({ page: p.page, column: l.column, y: l.y, n, kind: 'num' });
       }
-    }
-    const choiceRun = detectChoices(p.lines, p.page).choices.length >= 3;
-    if (!found.length) {
       const top = Math.min(...p.lines.map((l) => l.y));
-      if (hintN != null && hintN === expected) {
-        found.push({ page: p.page, column: 0, y: top, n: hintN, hint: true });
-        expected = hintN + 1;
-      } else if (choiceRun && sawChoicesSinceStart && starts.length > 0) {
-        // a full new set of choices with no readable number: still a new question
-        found.push({ page: p.page, column: 0, y: top, n: expected, hint: true });
-        expected++;
-      }
+      const hint = p.lines.map((l) => ITEM_OF_RE.exec(l.text)).find(Boolean);
+      if (hint) cands.push({ page: p.page, column: 0, y: top, n: parseInt(hint[1], 10), kind: 'hint' });
+      if (detectChoices(p.lines, p.page, null, p.words).choices.length >= 3) cands.push({ page: p.page, column: 0, y: top, n: null, kind: 'choices' });
     }
-    if (found.length) {
-      sawChoicesSinceStart = choiceRun && found.length === 1;
-      starts.push(...found);
-      pageStarts.set(p.page, found);
-    } else if (choiceRun) sawChoicesSinceStart = true;
+    perPage.push(cands);
+  }
+
+  // 2. the best numbering: 1, 2, 3… in page order, allowing an unreadable number now and then.
+  //    Dynamic programming over (page, last number) so one stray "1." can never derail the rest.
+  type State = { score: number; prev: State | null; starts: Start[]; last: number; qChoices: boolean };
+  // qChoices: the current question already showed its answer choices, so a new set of choices means a new question
+  let states = new Map<string, State>([['0:1', { score: 0, prev: null, starts: [], last: 0, qChoices: true }]]);
+  for (let pi = 0; pi < pages.length; pi++) {
+    const cands = perPage[pi];
+    const pageChoices = cands.some((c) => c.kind === 'choices');
+    const next = new Map<string, State>();
+    const keep = (st: State) => {
+      const k = `${st.last}:${st.qChoices ? 1 : 0}`;
+      const cur = next.get(k);
+      if (!cur || st.score > cur.score) next.set(k, st);
+    };
+    for (const st of states.values()) {
+      // A: this page starts no question (it continues the current one)
+      keep({ ...st, prev: st, starts: [], qChoices: st.qChoices || pageChoices });
+      // B: numbered starts on this page in reading order: last+1, last+2, …
+      let last = st.last;
+      const taken: Start[] = [];
+      let score = st.score;
+      for (const c of cands) {
+        if (c.kind !== 'num') continue;
+        if (c.n === last + 1) {
+          taken.push({ page: c.page, column: c.column, y: c.y, n: c.n, hint: false });
+          last = c.n;
+          score += 1;
+        } else if (c.n === last + 2 && taken.length === 0) {
+          // one question number was unreadable (it is counted, but scores less)
+          taken.push({ page: c.page, column: c.column, y: c.y, n: c.n, hint: false });
+          last = c.n;
+          score += 0.4;
+        }
+      }
+      if (taken.length) keep({ score, prev: st, starts: taken, last, qChoices: pageChoices });
+      if (taken.length) continue;
+      // C: an "Item N of M" header starts the next question
+      const hint = cands.find((c) => c.kind === 'hint');
+      if (hint && hint.n === st.last + 1) keep({ score: st.score + 0.9, prev: st, starts: [{ page: hint.page, column: 0, y: hint.y, n: hint.n, hint: true }], last: hint.n, qChoices: pageChoices });
+      // D: a new full set of choices after the current question already had its choices (unnumbered screenshots)
+      const ch = cands.find((c) => c.kind === 'choices');
+      if (ch && st.qChoices) keep({ score: st.score + 0.8, prev: st, starts: [{ page: ch.page, column: 0, y: ch.y, n: st.last + 1, hint: true }], last: st.last + 1, qChoices: true });
+    }
+    // keep the state space small
+    states = new Map([...next.entries()].sort((a, b) => b[1].score - a[1].score).slice(0, 60));
+  }
+  const best = [...states.values()].sort((a, b) => b.score - a.score || b.last - a.last)[0];
+  const starts: Start[] = [];
+  const pageStarts = new Map<number, Start[]>();
+  for (let st: State | null = best; st; st = st.prev) {
+    if (st.starts.length) {
+      starts.unshift(...st.starts);
+      pageStarts.set(st.starts[0].page, st.starts);
+    }
   }
   if (starts.length === 0) return { questions: [], confidence: 0, multiPerPage: false };
 

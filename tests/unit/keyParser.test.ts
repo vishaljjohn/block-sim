@@ -143,3 +143,52 @@ describe('matchPair guards', () => {
     expect(matchPair('7 B Because it is')?.letter).toBe('B');
   });
 });
+
+describe('formats seen in real-world keys (made-up text)', () => {
+  const stemPage = (n: number, pre: string, ans: string, extra: string[] = []) => [
+    { text: `Exam Section : Item ${n} of 9 Header`, page: n, top: true },
+    { text: `${pre}${n}. A 30-year-old man has a cough.`, page: n, top: true },
+    ...extra.map((t) => ({ text: t, page: n, top: true })),
+    { text: 'A) One', page: n },
+    { text: 'B) Two', page: n },
+    { text: ans, page: n },
+    { text: 'Because of reasons.', page: n },
+  ];
+  it('"CorrectAnswer:" with no space and "Correct Answers:"', () => {
+    const k = parseKeyLines([...stemPage(1, '', 'CorrectAnswer: B.'), ...stemPage(2, '', 'Correct Answers: A.')]);
+    expect(k.entries.map((e) => e.answer)).toEqual(['B', 'A']);
+  });
+  it('icons before the number ("X 10.", "\'I 3.", "~ 4.")', () => {
+    const k = parseKeyLines([...stemPage(1, 'X ', 'Correct Answer: B.'), ...stemPage(2, "'I ", 'Correct Answer: A.'), ...stemPage(3, '~ ', 'Correct Answer: B.')]);
+    expect(k.entries.map((e) => `${e.n}${e.answer}`)).toEqual(['1B', '2A', '3B']);
+  });
+  it('a temperature like 36.9°C at the top of a page is not item 36', () => {
+    const lines = [...stemPage(1, '', 'Correct Answer: B.', ['2.9°C (98.5°F), pulse is 64/min.'])];
+    const k = parseKeyLines(lines);
+    expect(k.entries.map((e) => `${e.n}${e.answer}`)).toEqual(['1B']);
+  });
+  it('"2. C . Text", "1. A - text" and "6.e Text"', () => {
+    expect(answers('1. A - WBC high here\n2. C . Duodenal text\n3.e Uncal text\n4.b\nshort')).toBe('1A 2C 3E 4B');
+  });
+  it('"3. Item 1 of 2" inside a two-question set', () => {
+    const k = parseKeyLines([
+      ...stemPage(1, '', 'Correct Answer: B.'),
+      { text: 'The following vignette applies to the next 2 items.', page: 2, top: true },
+      { text: "'I 2. Item 1 of 2", page: 2 },
+      { text: 'A) One', page: 2 },
+      { text: 'Correct Answer: A.', page: 2 },
+      { text: '3. Item 2 of 2', page: 3, top: true },
+      { text: 'Correct Answer: B.', page: 3 },
+    ]);
+    expect(k.entries.map((e) => `${e.n}${e.answer}`)).toEqual(['1B', '2A', '3B']);
+  });
+});
+
+describe('applying a key to questions', () => {
+  it('a key missing entry 1 is not shifted; a key for 51-100 is aligned', async () => {
+    const { applyKey, fixedLayout } = await import('../../src/lib/importer');
+    const qs = fixedLayout('e', { pagesPerQuestion: 1, startPage: 1, endPage: 3, skip: [] });
+    expect(applyKey(qs, parseKeyText('2. B\n3. C')).map((q) => q.answer)).toEqual(['', 'B', 'C']);
+    expect(applyKey(qs, parseKeyText('51. A\n52. B\n53. C')).map((q) => q.answer)).toEqual(['A', 'B', 'C']);
+  });
+});

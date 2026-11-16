@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out main (stable)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           path: stable
@@ -31,12 +31,12 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.beta.outputs.exists == 'true'
         with:
           ref: beta
           path: beta
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -73,7 +73,7 @@ jobs:
           cp -r stable/dist/. site/
           if [ -d beta/dist-beta ]; then mkdir -p site/beta && cp -r beta/dist-beta/. site/beta/; fi
           touch site/.nojekyll
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
 

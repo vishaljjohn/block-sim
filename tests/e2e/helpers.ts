@@ -75,3 +75,12 @@ export async function itemState(page: Page) {
     return { sel, struck, highlights: document.querySelectorAll('[data-testid="highlight"]').length, marked: (document.querySelector('[data-testid="mark"]') as HTMLInputElement | null)?.checked ?? false };
   });
 }
+
+/** Select an answer: the clickable choice on the page when there is one, else the bubble. */
+export async function pick(page: Page, letter: string) {
+  const choice = page.getByTestId(`choice-${letter}`);
+  const bubble = page.getByTestId(`bubble-${letter}`);
+  await expect(choice.or(bubble).first()).toBeVisible();
+  if (await choice.count()) await choice.click();
+  else await bubble.click();
+}

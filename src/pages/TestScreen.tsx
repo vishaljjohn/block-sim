@@ -34,6 +34,7 @@ import { classifyChange, isCorrect } from '../lib/score';
 import { choiceLetters, segmentRect, usesChoiceRegions } from '../lib/layout';
 import { examPdf, pageSize, renderPage, type PdfDoc } from '../lib/pdf';
 import { setOcrConcurrency } from '../lib/ocr';
+import { startTicker } from '../lib/ticker';
 import { createSnapshot, markReviewed, patchSettings, saveAttempt, saveExam } from '../lib/store';
 import { go, useElementWidth, useLive } from '../ui/hooks';
 import { QuestionView } from '../ui/QuestionView';
@@ -77,7 +78,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [now, setNow] = useState(Date.now());
   const [panel, setPanel] = useState<{ labs: boolean; calc: boolean; notes: boolean }>({ labs: false, calc: false, notes: false });
   const [menu, setMenu] = useState(false);
-  const [modal, setModal] = useState<null | 'grid' | 'confirm' | 'help' | 'timeup'>(null);
+  const [modal, setModal] = useState<null | 'grid' | 'confirm' | 'help'>(null);
   const [navFilter, setNavFilter] = useState<null | 'marked' | 'incomplete'>(null);
   const [filter, setFilter] = useState<Filter>((FILTERS.find((f) => f.id === startFilter)?.id ?? 'all') as Filter);
   const [showElapsed, setShowElapsed] = useState(false);
@@ -321,13 +322,10 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
         persist();
       }
       if (warn) setToast('5 minutes remaining in this block.');
-      if (rem === 0) {
-        setModal('timeup');
-        finishBlock();
-      }
+      if (rem === 0) finishBlock();
     };
     lastTick.current = Date.now();
-    const id = window.setInterval(tick, 1000);
+    const stopTicker = startTicker(tick, 1000);
     const flush = () => {
       if (dirty.current) persist();
     };
@@ -335,7 +333,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
     document.addEventListener('visibilitychange', vis);
     window.addEventListener('pagehide', flush);
     return () => {
-      window.clearInterval(id);
+      stopTicker();
       document.removeEventListener('visibilitychange', vis);
       window.removeEventListener('pagehide', flush);
       flush();
@@ -398,7 +396,8 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
 
   const select = (l: string) => canAnswer && editItem((it) => selectAnswer(it, l, Date.now()));
   const strike = (l: string) => testing && !itemLocked && editItem((it) => toggleStrike(it, l));
-  const mark = () => (testing || review) && editItem((it) => ({ ...it, marked: !it.marked }));
+  // review is read-only: marking only happens during the block
+  const mark = () => testing && !a?.paused && editItem((it) => ({ ...it, marked: !it.marked }));
   const submitTutor = () => {
     if (!cur || !cur.answer) return;
     editItem((it) => lockItem(it, keyOf(it) ?? ''));
@@ -684,7 +683,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
               <div className="px-5 pb-10 pt-3">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2" style={{ maxWidth: qWidth + answerCol + explainW + 24 }}>
                   <label className="flex cursor-pointer items-center gap-1.5 text-[13px]">
-                    <input type="checkbox" className="h-4 w-4" checked={!!cur?.marked} onChange={mark} data-testid="mark" aria-label="Mark question" />
+                    <input type="checkbox" className="h-4 w-4" checked={!!cur?.marked} onChange={mark} disabled={!testing} data-testid="mark" aria-label="Mark question" />
                     <IconFlag />
                     Mark Question
                   </label>
@@ -744,6 +743,20 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                         <div className="text-[13px] text-gray-700" data-testid="answer-readout">
                           Selected: <b>{cur.answer ?? 'none'}</b>
                         </div>
+                      )}
+                      {exam && question && question.choices && question.choices.length >= 2 && !question.forceBubbles && (
+                        <button
+                          type="button"
+                          className="text-[12px] text-gray-600 underline"
+                          data-testid="toggle-bubbles"
+                          onClick={() => {
+                            const e2 = { ...exam, alwaysBubbles: !exam.alwaysBubbles };
+                            setExams((m) => new Map(m).set(e2.id, e2));
+                            void saveExam(e2);
+                          }}
+                        >
+                          {exam.alwaysBubbles ? 'Click the choices on the page instead' : 'Choices look wrong? Use bubbles'}
+                        </button>
                       )}
                       {testing && a.mode === 'tutor' && !itemLocked && (
                         <button className="btn-primary" disabled={!cur?.answer} onClick={submitTutor} data-testid="submit">

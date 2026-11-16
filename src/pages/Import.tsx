@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Exam } from '../types';
 import { applyKey, fixedLayout, formatPageList, newExam, parsePageList, readKeyFromPdf, readKeyFromText } from '../lib/importer';
-import { analyzeExam, resumeBackgroundText, wordsProvider } from '../lib/analyze';
+import { analyzeExam, highlightReader, resumeBackgroundText, wordsProvider } from '../lib/analyze';
 import { closePdf, openPdf, type PdfDoc } from '../lib/pdf';
 import { saveExam, savePdf } from '../lib/store';
 import type { ParsedKey } from '../lib/keyParser';
@@ -78,20 +78,21 @@ export function ImportPage() {
       else if (source === 'pdf' && keyFile) {
         setBusy('Reading the answer key PDF…');
         const kd = await openPdf(await keyFile.arrayBuffer());
-        const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the answer key: page ${d} of ${t}…`));
+        const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the answer key: page ${d} of ${t}…`), highlightReader);
         key = r.key;
         if (r.pagesWithText === 0) note = 'The answer key PDF has no readable text.';
         closePdf(kd);
       } else if (source === 'same' && keyStartN >= 1) {
         setBusy('Reading the answer key pages…');
-        const r = await readKeyFromPdf(doc, keyStartN, pageCount, provider, (d, t) => setBusy(`Reading the answer key: page ${d} of ${t}…`));
+        const r = await readKeyFromPdf(doc, keyStartN, pageCount, provider, (d, t) => setBusy(`Reading the answer key: page ${d} of ${t}…`), highlightReader);
         key = r.key;
       }
 
       // find question numbers, choices and (for "answer after each question") inline answers
       setBusy('Looking at the question pages…');
       cancelRef.current = { cancelled: false };
-      const analyzed = await analyzeExam(exam, doc, { auto: layout === 'auto', inlineAnswers: source === 'inline', endPage, startPage: start, skip: skipList, cancel: cancelRef.current }, (d, t, ocr) => {
+      const expectedCount = key ? key.entries.filter((e) => e.answer || e.answerText).length || key.entries.length : undefined;
+      const analyzed = await analyzeExam(exam, doc, { auto: layout === 'auto', inlineAnswers: source === 'inline', endPage, startPage: start, skip: skipList, cancel: cancelRef.current, expectedCount }, (d, t, ocr) => {
         setOcrRunning(ocr && d < t);
         setBusy(ocr ? `Reading scanned pages with text recognition: ${d} of ${t}. This runs once per PDF…` : `Looking at the question pages: ${d} of ${t}…`);
       });
