@@ -15,6 +15,8 @@ export interface Segment {
 export interface ChoiceRegion extends Rect {
   letter: string;
   page: number;
+  /** the page's own radio-button circle in front of the label, when one was found */
+  radio?: Rect;
 }
 
 export interface Question {
@@ -31,6 +33,10 @@ export interface Question {
   forceBubbles?: boolean;
   /** 0–1; below 0.6 is shown as a low-confidence warning on the key check screen */
   keyConfidence?: number;
+  /** text of each detected choice (used to resolve keys that give the answer as text) */
+  choiceTexts?: { letter: string; text: string }[];
+  /** the key gave the answer as choice text that could not be matched to a letter yet */
+  answerText?: string;
 }
 
 export interface Exam {

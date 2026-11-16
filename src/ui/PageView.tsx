@@ -86,16 +86,15 @@ export function PageView({ examId, doc, page, crop, width, children, handlers, c
   return (
     <div
       ref={wrapRef}
-      className={'relative overflow-hidden bg-white ' + (className ?? '')}
+      className={'relative bg-white ' + (className ?? '')}
       style={{ width, height: height || Math.round(width * 0.6), ...style }}
       data-page={page}
       data-drawn={drawn ? '1' : '0'}
       {...handlers}
     >
-      <canvas
-        ref={canvasRef}
-        style={{ position: 'absolute', left: -crop.x * fullW, top: -crop.y * fullH, width: fullW, height: fullH, pointerEvents: 'none' }}
-      />
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+        <canvas ref={canvasRef} style={{ position: 'absolute', left: -crop.x * fullW, top: -crop.y * fullH, width: fullW, height: fullH }} />
+      </div>
       {size && children ? children(api) : null}
     </div>
   );

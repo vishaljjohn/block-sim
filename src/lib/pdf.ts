@@ -121,3 +121,14 @@ export async function pageWords(page: PDFPageProxy): Promise<Word[]> {
 }
 
 export { hasRealText };
+
+/** Does the page draw any raster image? (screenshots pasted into a document with a little typed text) */
+export async function pageHasImage(page: PDFPageProxy): Promise<boolean> {
+  try {
+    const ops = await page.getOperatorList();
+    const img = new Set([pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageXObjectRepeat]);
+    return ops.fnArray.some((f) => img.has(f));
+  } catch {
+    return false;
+  }
+}

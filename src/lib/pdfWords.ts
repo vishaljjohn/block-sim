@@ -41,5 +41,15 @@ export function itemsToWords(items: unknown[], viewport: { width: number; height
 /** True when a page has a real, usable text layer (not just a watermark or page number). */
 export function hasRealText(words: Word[]): boolean {
   const chars = words.reduce((s, w) => s + w.t.length, 0);
-  return words.length >= 12 && chars >= 60;
+  return words.length >= 6 && chars >= 30;
+}
+
+/** Add OCR words that the PDF's own text layer does not already cover (pages mixing typed text and images). */
+export function mergeWords(pdf: Word[], ocr: Word[]): Word[] {
+  const covered = (o: Word) => {
+    const cx = o.x + o.w / 2;
+    const cy = o.y + o.h / 2;
+    return pdf.some((p) => cx >= p.x - 0.003 && cx <= p.x + p.w + 0.003 && cy >= p.y - 0.004 && cy <= p.y + p.h + 0.004);
+  };
+  return [...pdf, ...ocr.filter((o) => !covered(o))];
 }

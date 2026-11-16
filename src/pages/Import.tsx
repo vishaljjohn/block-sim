@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Exam } from '../types';
 import { applyKey, fixedLayout, formatPageList, newExam, parsePageList, readKeyFromPdf, readKeyFromText } from '../lib/importer';
-import { analyzeExam, wordsProvider } from '../lib/analyze';
+import { analyzeExam, resumeBackgroundText, wordsProvider } from '../lib/analyze';
 import { closePdf, openPdf, type PdfDoc } from '../lib/pdf';
 import { saveExam, savePdf } from '../lib/store';
 import type { ParsedKey } from '../lib/keyParser';
@@ -27,6 +27,8 @@ export function ImportPage() {
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState('');
   const [drag, setDrag] = useState(false);
+  const [ocrRunning, setOcrRunning] = useState(false);
+  const cancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -88,12 +90,19 @@ export function ImportPage() {
 
       // find question numbers, choices and (for "answer after each question") inline answers
       setBusy('Looking at the question pages…');
-      const analyzed = await analyzeExam(exam, doc, { auto: layout === 'auto', inlineAnswers: source === 'inline', endPage, startPage: start, skip: skipList }, (d, t) => setBusy(`Looking at the question pages: ${d} of ${t}…`));
+      cancelRef.current = { cancelled: false };
+      const analyzed = await analyzeExam(exam, doc, { auto: layout === 'auto', inlineAnswers: source === 'inline', endPage, startPage: start, skip: skipList, cancel: cancelRef.current }, (d, t, ocr) => {
+        setOcrRunning(ocr && d < t);
+        setBusy(ocr ? `Reading scanned pages with text recognition: ${d} of ${t}. This runs once per PDF…` : `Looking at the question pages: ${d} of ${t}…`);
+      });
+      setOcrRunning(false);
       let questions = analyzed.questions;
       if (source === 'inline' && analyzed.inlineKey) key = analyzed.inlineKey;
       if (key && key.entries.length) questions = applyKey(questions, key);
       const final: Exam = { ...exam, ...analyzed.examPatch, questions };
       await saveExam(final);
+      // pages not read yet (skipped OCR) are finished in the background; the exam is usable now
+      resumeBackgroundText(exam.id);
       setBusy('');
       const q = new URLSearchParams();
       if (note) q.set('note', note);
@@ -209,6 +218,11 @@ export function ImportPage() {
               Continue: check the answer key
             </button>
             {busy && <span className="text-sm" data-testid="import-busy">{busy}</span>}
+            {ocrRunning && (
+              <button className="btn" data-testid="skip-ocr" onClick={() => (cancelRef.current.cancelled = true)} title="Use one page per question now; text recognition finishes in the background">
+                Skip waiting
+              </button>
+            )}
           </div>
           {source === 'pdf' && !keyFile && <div className="mt-1 text-xs text-gray-600">Choose the answer key PDF above, or pick another option.</div>}
         </>

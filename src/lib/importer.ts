@@ -1,7 +1,7 @@
 import { SCHEMA_VERSION } from '../config';
 import { uid } from '../db';
 import type { Exam, Question, Word } from '../types';
-import { parseKeyLines, parseKeyText, type KeyEntry, type ParsedKey } from './keyParser';
+import { parseKeyLines, parseKeyText, resolveAnswerText, type KeyEntry, type ParsedKey } from './keyParser';
 import { hasRealText, pageWords, type PdfDoc } from './pdf';
 import { pagesToKeyLines } from './textLines';
 
@@ -78,7 +78,13 @@ export function applyKey(questions: Question[], key: ParsedKey, keepExisting = f
     out.keyConfidence = e.conf;
     const tags = key.tags[e.n];
     if (tags?.length && !q.tags.length) out.tags = tags;
-    if (!out.answer && e.answerText) (out as Question & { answerText?: string }).answerText = e.answerText;
+    if (!out.answer && e.answerText) {
+      const letter = q.choiceTexts?.length ? resolveAnswerText(e.answerText, q.choiceTexts) : '';
+      if (letter) {
+        out.answer = letter;
+        out.keyConfidence = Math.min(e.conf, 0.7);
+      } else out.answerText = e.answerText;
+    }
     return out;
   });
 }
@@ -99,15 +105,18 @@ export interface KeyReadResult {
 
 /** Read an answer key out of PDF pages (rebuilding lines by position). */
 export async function readKeyFromPdf(doc: PdfDoc, fromPage: number, toPage: number, provider: WordsProvider, onProgress?: (done: number, total: number) => void): Promise<KeyReadResult> {
-  const pages: { page: number; words: Word[] }[] = [];
-  let withText = 0;
   const total = toPage - fromPage + 1;
-  for (let p = fromPage; p <= toPage; p++) {
-    const r = await provider(doc, p);
-    if (r.words.length) withText++;
-    pages.push({ page: p, words: r.words });
-    onProgress?.(p - fromPage + 1, total);
-  }
+  let done = 0;
+  // pages are read in parallel (OCR runs through a small worker pool) and put back in order
+  const pages = await Promise.all(
+    Array.from({ length: total }, async (_, i) => {
+      const p = fromPage + i;
+      const r = await provider(doc, p).catch(() => ({ words: [] as Word[], source: 'none' as const }));
+      onProgress?.(++done, total);
+      return { page: p, words: r.words };
+    }),
+  );
+  const withText = pages.filter((p) => p.words.length).length;
   return { key: parseKeyLines(pagesToKeyLines(pages)), pagesWithText: withText, pagesTotal: total };
 }
 
@@ -124,7 +133,7 @@ export interface KeyWarning {
 export function keyWarnings(questions: Question[]): KeyWarning[] {
   const out: KeyWarning[] = [];
   for (const q of questions) {
-    if (!q.answer) out.push({ n: q.number, kind: 'missing', text: 'No answer' });
+    if (!q.answer) out.push({ n: q.number, kind: 'missing', text: q.answerText ? `Key says “${q.answerText.slice(0, 40)}”: pick the letter` : 'No answer' });
     else if (q.answer.charCodeAt(0) - 65 >= q.choiceCount) out.push({ n: q.number, kind: 'beyond', text: `Answer ${q.answer} is beyond the ${q.choiceCount} choices` });
     else if (q.keyConfidence != null && q.keyConfidence < 0.6) out.push({ n: q.number, kind: 'lowconf', text: 'Low text-recognition confidence: please check' });
   }

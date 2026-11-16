@@ -147,7 +147,7 @@ export function QuestionView(p: QuestionViewProps) {
   });
 
   return (
-    <div className="no-select" data-testid="question-view">
+    <div className="no-select" data-testid="question-view" style={{ paddingLeft: clickable ? 34 : 0 }}>
       {question.segments.map((seg, i) => {
         const text = texts.get(seg.page);
         const crop = segmentRect(exam, seg, text);
@@ -159,7 +159,7 @@ export function QuestionView(p: QuestionViewProps) {
             doc={doc}
             page={seg.page}
             crop={crop}
-            width={width}
+            width={clickable ? width - 34 : width}
             style={{ touchAction: canMark ? 'pan-y pinch-zoom' : 'auto', cursor: canMark ? 'text' : 'default', marginBottom: i < question.segments.length - 1 ? 4 : 0 }}
             handlers={handlers(i, seg, () => apiRef)}
           >
@@ -217,12 +217,25 @@ function pad(r: Rect, words: boolean): Rect {
 function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: ChoiceRegion; api: PageApi; selected: boolean; struck: boolean; reveal?: string | null; interactive: boolean }) {
   const isKey = !!reveal && reveal === c.letter;
   const wrong = !!reveal && selected && !isKey;
-  // radio sits just left of the choice letter, sized from the line height
-  const linePx = Math.max(12, Math.min(22, (c.h / api.crop.h) * api.height * 0.8));
-  const r = Math.min(linePx, 18);
+  const pxPerY = api.height / api.crop.h;
+  const pxPerX = api.width / api.crop.w;
   const leftPct = ((c.x - api.crop.x) / api.crop.w) * 100;
   const topPct = ((c.y - api.crop.y) / api.crop.h) * 100;
-  const firstLine = Math.min((c.h / api.crop.h) * api.height, linePx * 1.3);
+  // radio: on top of the page's own circle when there is one, otherwise just left of the label
+  let radio: { left: string; top: string; size: number };
+  if (c.radio) {
+    const size = Math.max(10, Math.min(26, c.radio.h * pxPerY * 1.15, c.radio.w * pxPerX * 1.15));
+    radio = {
+      left: `calc(${((c.radio.x + c.radio.w / 2 - api.crop.x) / api.crop.w) * 100}% - ${size / 2}px)`,
+      top: `calc(${((c.radio.y + c.radio.h / 2 - api.crop.y) / api.crop.h) * 100}% - ${size / 2}px)`,
+      size,
+    };
+  } else {
+    const firstLine = Math.min(c.h * pxPerY, 30);
+    const size = Math.max(11, Math.min(18, firstLine * 0.62));
+    radio = { left: `calc(${leftPct}% - ${size + 8}px)`, top: `calc(${topPct}% + ${(Math.min(c.h * pxPerY, firstLine * 1.1) - size) / 2}px)`, size };
+  }
+  const r = radio.size;
   return (
     <>
       <div
@@ -232,8 +245,8 @@ function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: C
         title={interactive ? `Choice ${c.letter}: click to select, right-click to strike out` : undefined}
         style={{
           ...api.pos({ x: c.x - 0.004, y: c.y, w: c.w + 0.008, h: c.h }),
-          background: isKey ? 'rgba(22,163,74,0.22)' : wrong ? 'rgba(220,38,38,0.2)' : selected ? 'rgba(28,73,115,0.13)' : struck ? 'rgba(255,255,255,0.62)' : 'transparent',
-          outline: isKey ? '2px solid #15803d' : wrong ? '2px solid #dc2626' : 'none',
+          background: isKey ? 'rgba(46,125,30,0.20)' : wrong ? 'rgba(220,38,38,0.16)' : struck ? 'rgba(255,255,255,0.6)' : 'transparent',
+          outline: isKey ? '2px solid #2e7d1e' : wrong ? '2px solid #dc2626' : 'none',
           cursor: interactive ? 'pointer' : 'default',
         }}
       >
@@ -242,12 +255,12 @@ function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: C
       <div
         style={{
           position: 'absolute',
-          left: `calc(${leftPct}% - ${r + 7}px)`,
-          top: `calc(${topPct}% + ${(firstLine - r) / 2}px)`,
+          left: radio.left,
+          top: radio.top,
           width: r,
           height: r,
           borderRadius: '50%',
-          border: '1.5px solid #333',
+          border: `${r > 16 ? 2 : 1.5}px solid ${struck ? '#999' : '#444'}`,
           background: '#fff',
           pointerEvents: 'none',
           display: 'flex',
@@ -255,10 +268,10 @@ function ChoiceOverlay({ c, api, selected, struck, reveal, interactive }: { c: C
           justifyContent: 'center',
         }}
       >
-        {selected && <div style={{ width: r * 0.55, height: r * 0.55, borderRadius: '50%', background: wrong ? '#dc2626' : isKey ? '#15803d' : '#1c4973' }} />}
+        {selected && <div style={{ width: r * 0.56, height: r * 0.56, borderRadius: '50%', background: wrong ? '#dc2626' : isKey ? '#2e7d1e' : '#1c4973' }} />}
       </div>
       {reveal && (isKey || wrong) && (
-        <div style={{ position: 'absolute', left: `calc(${leftPct}% - ${r + 30}px)`, top: `calc(${topPct}% + ${(firstLine - r) / 2 - 2}px)`, fontWeight: 700, fontSize: r + 2, lineHeight: 1, color: isKey ? '#15803d' : '#dc2626', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', left: `calc(${radio.left} - ${r + 4}px)`, top: radio.top, fontWeight: 700, fontSize: r, lineHeight: 1, color: isKey ? '#2e7d1e' : '#dc2626', pointerEvents: 'none' }}>
           {isKey ? '✓' : '✗'}
         </div>
       )}

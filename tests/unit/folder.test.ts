@@ -22,6 +22,7 @@ class FakeDir {
       if (!o?.create) throw Object.assign(new Error('nf'), { name: 'NotFoundError' });
       this.files.set(n, new FakeFile(new Blob([])));
     }
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
       kind: 'file' as const,

@@ -6,6 +6,7 @@ import { getSettings, maybeDailySnapshot, requestPersistence, setReadOnly } from
 import { applyUpdate, registerServiceWorker, useUpdateAvailable } from './lib/sw';
 import { ensureDemo } from './lib/demo';
 import { initFolderSync } from './lib/folder';
+import { resumeBackgroundText } from './lib/analyze';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Shell } from './ui/Shell';
 import { go, useRoute } from './ui/hooks';
@@ -51,6 +52,8 @@ export function App() {
         await initFolderSync();
         await ensureDemo();
         void maybeDailySnapshot();
+        // finish reading any pages left over from an earlier session (OCR), in the background
+        window.setTimeout(() => resumeBackgroundText(), 1500);
         const s = await getSettings();
         if (!s.welcomed && (window.location.hash === '' || window.location.hash === '#/' || window.location.hash === '#')) go('/welcome', true);
         setReady(true);

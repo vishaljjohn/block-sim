@@ -33,6 +33,7 @@ import { block, endBlock, lockItem, selectAnswer, setConfidence, setHighlights, 
 import { classifyChange, isCorrect } from '../lib/score';
 import { choiceLetters, segmentRect, usesChoiceRegions } from '../lib/layout';
 import { examPdf, pageSize, renderPage, type PdfDoc } from '../lib/pdf';
+import { setOcrConcurrency } from '../lib/ocr';
 import { createSnapshot, markReviewed, patchSettings, saveAttempt, saveExam } from '../lib/store';
 import { go, useElementWidth, useLive } from '../ui/hooks';
 import { QuestionView } from '../ui/QuestionView';
@@ -87,6 +88,12 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [copied, setCopied] = useState(false);
   const [areaRef, areaW] = useElementWidth<HTMLDivElement>();
   const lastTick = useRef(Date.now());
+
+  // keep the test screen smooth: background text recognition uses a single worker while a block is open
+  useEffect(() => {
+    setOcrConcurrency(1);
+    return () => setOcrConcurrency(4);
+  }, []);
 
   // ---------- load ----------
   useEffect(() => {
