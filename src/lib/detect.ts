@@ -317,6 +317,11 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
           taken.push({ page: c.page, column: c.column, y: c.y, n: c.n, hint: false });
           last = c.n;
           score += 0.4;
+        } else if (c.n != null && c.n > last + 2 && c.n <= last + 6 && taken.length === 0) {
+          // several numbers in a row were unreadable: re-sync (barely scores, so stray numbers do not win)
+          taken.push({ page: c.page, column: c.column, y: c.y, n: c.n, hint: false });
+          last = c.n;
+          score += 0.1;
         }
       }
       if (taken.length) keep({ score, prev: st, starts: taken, last, qChoices: pageChoices });

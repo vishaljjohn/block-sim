@@ -134,6 +134,7 @@ export function QuestionView(p: QuestionViewProps) {
   const dragRef = useRef<Drag | null>(null);
   const longTimer = useRef<number | null>(null);
   const lastPt = useRef({ x: 0, y: 0 });
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const highlights = p.item?.highlights ?? [];
   const strikes = p.hideStrikes ? [] : (p.item?.strikes ?? []);
   const clickable = usesChoiceRegions(exam, question);
@@ -209,8 +210,7 @@ export function QuestionView(p: QuestionViewProps) {
         if (!canMark) return;
         if (display.highlightMode === 'manual') {
           // keep the selection and ask for a color next to where the drag ended
-          const a = api();
-          const box = (a && (document.querySelector(`[data-testid="question-view"]`) as HTMLElement | null)?.getBoundingClientRect()) || null;
+          const box = rootRef.current?.getBoundingClientRect() ?? null;
           setPending({ seg: segIndex, page: d.page, w0: d.w0, w1: d.w1, x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, px: lastPt.current.x - (box?.left ?? 0), py: lastPt.current.y - (box?.top ?? 0) });
           return;
         }
@@ -242,7 +242,7 @@ export function QuestionView(p: QuestionViewProps) {
   });
 
   return (
-    <div className="no-select relative" data-testid="question-view" style={{ paddingLeft: clickable ? 34 : 0 }}>
+    <div ref={rootRef} className="no-select relative" data-testid="question-view" style={{ paddingLeft: clickable ? 34 : 0 }}>
       {question.segments.map((seg, i) => {
         const text = texts.get(seg.page);
         const crop = segmentRect(exam, seg, text);

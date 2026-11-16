@@ -238,3 +238,34 @@ describe('pictures in a question', () => {
     expect(detectFigures({ data: new Uint8ClampedArray(W * H * 4).fill(255), width: W, height: H }, [])).toEqual([]);
   });
 });
+
+describe('numbering re-sync', () => {
+  it('recovers after a few unreadable numbers instead of losing every later question', () => {
+    const p = (n: number, lines: [number, number, string][]) => pageLines(n, words(lines));
+    const pages = [p(1, [[0.05, 0.1, '1. Stem one here']]), p(2, [[0.05, 0.1, '2. Stem two here']]), p(3, [[0.05, 0.1, 'I6. misread number']])];
+    for (let k = 4; k <= 8; k++) pages.push(p(k, [[0.05, 0.1, `${k + 3}. Stem ${k + 3} here`]]));
+    const lay = detectLayout(pages);
+    expect(lay.questions.map((q) => q.segments.map((s) => s.page).join('+'))).toEqual(['1', '2+3', '4', '5', '6', '7', '8']);
+  });
+});
+
+describe('auto-crop with light toolbars', () => {
+  it('drops a thin light header and a toolbar far below the question', async () => {
+    const W = 200;
+    const H = 150;
+    const data = new Uint8ClampedArray(W * H * 4).fill(255);
+    const ink = (x0: number, y0: number, x1: number, y1: number) => {
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if ((x + y) % 3 === 0) data.set([0, 0, 0, 255], (y * W + x) * 4);
+    };
+    ink(80, 2, 120, 5); // "Question 3 of 50" header
+    ink(5, 10, 190, 14); // stem
+    ink(5, 16, 180, 20);
+    ink(10, 24, 60, 27); // choices
+    ink(10, 30, 60, 33);
+    ink(20, 143, 180, 147); // toolbar icons at the bottom
+    const r = detectCrop({ data, width: W, height: H });
+    expect(r.y).toBeGreaterThan(5 / H);
+    expect(r.y).toBeLessThan(10 / H);
+    expect(r.y + r.h).toBeLessThan(60 / H);
+  });
+});

@@ -38,3 +38,25 @@ Reasonable choices made without asking, with the reason.
 ## Release
 - One GitHub Actions workflow builds both branches on every push and publishes a single Pages artifact
   (`main` at the root, `beta` under `/beta/`), so a push to one channel never removes the other.
+
+## Later additions
+- **Display settings** (gear in the test screen, and Settings → Display) follow the owner's screenshot: Appearance
+  light/dark, Typography size S/M/L/XL and Bold, Layout style, Highlighting Quick/Manual with five colors. The second
+  layout is called "Board-style" (not a trademarked exam name). "Default" is a cleaner slate look with rounded
+  controls and the system font; "Board-style" is the navy look from the reference screenshots (the default setting).
+- **Dark mode** inverts the page's lightness while keeping hues (one CSS filter), so the PDF page images also turn
+  dark-on-light → light-on-dark; the navy bars and zoomed pictures are flipped back so they keep their real colors.
+- **Text size** scales the question image and the interface text. **Bold** thickens dark strokes in the page image
+  (an SVG morphology filter) and bolds interface text.
+- **Manual highlighting**: drag selects, a small palette appears next to it, the chosen color is applied. Highlights
+  of different colors never merge; old highlights (before colors existed) are yellow.
+- **Strike-out**: an "ab" button to the right of every choice on the page (also right-click / long-press).
+- **Image zoom**: pictures inside a question (photos, ECGs, x-rays) are found from the page pixels (dense non-text
+  areas) and get a Zoom button; the viewer renders only that area, so it stays sharp at 500%.
+- **Restore** brings back exams/attempts deleted after the backup was made (the user chose that backup), while
+  folder sync still honors deletions made on other computers.
+- **Answer keys that only highlight the answer** are read from the page pixels (yellow/green behind a choice).
+- **Layout hint**: the key's highest question number tells how many questions to expect; when page text is
+  ambiguous, the layout (detected vs. N whole pages per question) closest to that count is used.
+- **Clock** ticks from a tiny worker so background tabs (throttled to ~1/min) are not mistaken for sleep.
+- **Release flow**: new work goes to `beta` first; `main` (stable) only on "promote to stable".
