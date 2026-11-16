@@ -37,10 +37,10 @@ const PAIR_RE = new RegExp(`^(?:Q(?:uestion)?\\.?\\s*|#\\s*)?(\\d{1,3})\\s*(?:[.
 const STEM_RE = /^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*(?:[.):](?![\d,])|\s[-–—]\s)\s*(.*)$/i; // "36.9°C" is a number, not item 36
 const BARE_NUM_RE = /^(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*[.):]?$/i;
 export const ANSWER_RE = new RegExp(
-  `^[•*\\-\\s]*(?:the\\s+)?(?:correct\\s*answers?|correct\\s*choice|correct\\s*response|answer|ans|key)\\.?\\s*(?:is|was)?\\s*[:=${DASH}]?\\s*\\(?([A-Za-z])\\)?(?=$|[\\s.,;:)${DASH}])\\s*[.):,;${DASH}]?\\s*(.*)$`,
+  `^[•*\\-\\s]*(?:the\\s+)?(?:correct\\s*answers?|right\\s*answer|correct\\s*choice|correct\\s*response|answer|ans|key)\\.?\\s*(?:is|was)?\\s*[:=${DASH}]?\\s*\\(?([A-Za-z])\\)?(?=$|[\\s.,;:)${DASH}])\\s*[.):,;${DASH}]?\\s*(.*)$`,
   'i',
 );
-const ANSWER_TEXT_RE = /^[•*\-\s]*(?:the\s+)?(?:correct\s*answer|answer)\s*(?:is\s*:?|[:=])\s*(.{3,})$/i;
+const ANSWER_TEXT_RE = /^[•*\-\s]*(?:the\s+)?(?:correct\s*answer|right\s*answer|answer)\s*(?:is\s*:?|[:=])\s*(.{3,})$/i;
 export const ITEM_OF_RE = /\b(?:item|question|q)\s*[:#]?\s*(\d{1,3})\s+of\s+(\d{1,3})\b/i;
 const TAG_LINE_RE = /^(.*?[A-Za-z].*?)\s*[:\-–—]\s*((?:\d{1,3}\s*,\s*)+\d{1,3})\s*,?\s*$/;
 const AFTER_LETTER_OK = new RegExp(`^\\s*(?:$|[.),:;|${DASH}])`);

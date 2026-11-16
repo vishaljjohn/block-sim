@@ -81,10 +81,24 @@ async function processPageNow(examId: string | null, doc: PdfDoc, page: number, 
     if (!allowOcr) return real ? finish(examId, doc, page, words, 'pdf', 100) : null;
     const v = pg.getViewport({ scale: 1 });
     const canvas = await renderToCanvas(pg, ocrWidth(v.width));
-    const r = await ocrCanvas(canvas);
+    const keep = (ws: Word[]) => ws.filter((w) => w.c >= 35 || (w.t.length > 1 && w.c >= 20));
+    let r = await ocrCanvas(canvas);
+    let ocrWords = keep(r.words);
+    // no answer choices found: page segmentation may have merged the rows of a choice box; try reading the page
+    // as one column instead, and keep that version if it finds the choices
+    const choicesIn = (ws: Word[]) => {
+      const ordered = readingOrder(ws);
+      return detectChoices(pageLines(page, ordered).lines, page, null, ordered).choices.length;
+    };
+    if (choicesIn(ocrWords) < 2 && ocrWords.length > 15) {
+      const r2 = await ocrCanvas(canvas, 'column');
+      const w2 = keep(r2.words);
+      if (choicesIn(w2) >= 2) {
+        r = r2;
+        ocrWords = w2;
+      }
+    }
     canvas.width = canvas.height = 1; // free memory now
-    // keep confident words, and drop single-character noise from images and icons
-    const ocrWords = r.words.filter((w) => w.c >= 35 || (w.t.length > 1 && w.c >= 20));
     words = real ? mergeWords(words, ocrWords) : ocrWords;
     source = 'ocr';
     conf = r.conf;
@@ -178,7 +192,8 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
       // compare with "k whole pages per question": use it when its count is closer to the key's count
       const per = Math.max(1, Math.round(pages.length / n));
       const fixedCount = Math.ceil(pages.length / per);
-      if (Math.abs(fixedCount - n) < Math.abs(lay.questions.length - n)) {
+      // questions longer than 4 pages are not plausible: then the count does not describe this PDF
+      if (per <= 4 && Math.abs(fixedCount - n) < Math.abs(lay.questions.length - n)) {
         questions = fixedLayout(exam.id, { pagesPerQuestion: per, startPage: opts.startPage, endPage: opts.endPage, skip: opts.skip });
         enough = false;
       }

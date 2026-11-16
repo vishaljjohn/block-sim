@@ -65,10 +65,11 @@ export interface OcrResult {
 }
 
 /** Recognize an image (canvas rendered from a PDF page) and return word boxes as page fractions. */
-export async function ocrCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<OcrResult> {
+export async function ocrCanvas(canvas: HTMLCanvasElement | OffscreenCanvas, mode: 'auto' | 'column' = 'auto'): Promise<OcrResult> {
   const slot = await acquire();
   try {
     const w = await slot.worker;
+    await w.setParameters({ tessedit_pageseg_mode: mode === 'column' ? PSM.SINGLE_COLUMN : PSM.AUTO });
     const img = canvas instanceof HTMLCanvasElement ? await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('canvas encode failed'))), 'image/png')) : await (canvas as OffscreenCanvas).convertToBlob({ type: 'image/png' });
     const r = await w.recognize(img, {}, { blocks: true, text: false });
     const W = canvas.width;

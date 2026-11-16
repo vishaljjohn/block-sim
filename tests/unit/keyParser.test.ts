@@ -208,3 +208,7 @@ describe('keys without question numbers', () => {
     expect(k.entries[0].explanation).toBe('Explanation for page 1.');
   });
 });
+
+it('"Right answer is A" lines', () => {
+  expect(answers('Right answer is A\nbecause.\nRight answer is C\nmore.')).toBe('1A 2C');
+});
