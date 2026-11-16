@@ -1,0 +1,25 @@
+# NEVER commit private test material
+/private-test/
+private-test/
+*.pdf
+*.PDF
+node_modules/
+dist/
+dist-*/
+.DS_Store
+test-results/
+playwright-report/
+/tests/fixtures/generated/
+/public/demo/
+/public/vendor/
+*.local
+.env*
+coverage/
+/private-results/
+/public/icon-192.png
+/public/icon-512.png
+/public/icon.svg
+/public/manifest.webmanifest
+/.claude/
+/PDF_Viewer.html
+/reference/

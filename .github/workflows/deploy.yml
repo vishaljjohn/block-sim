@@ -1,0 +1,88 @@
+name: Build, test and deploy
+
+on:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main (stable)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: stable
+      - name: Check out beta (if it exists)
+        id: beta
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${{ github.repository }}" beta >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.beta.outputs.exists == 'true'
+        with:
+          ref: beta
+          path: beta
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Stable - install, lint, unit tests, build
+        working-directory: stable
+        run: |
+          npm ci
+          npm run lint
+          npm run fixtures
+          npm test
+          npm run build
+      - name: Beta - install, lint, unit tests, build
+        if: steps.beta.outputs.exists == 'true'
+        working-directory: beta
+        run: |
+          npm ci
+          npm run lint
+          npm run fixtures
+          npm test
+          npm run build:beta
+
+      - name: End-to-end tests (Chromium) on the branch that was pushed
+        run: |
+          dir=stable
+          if [ "${{ github.ref_name }}" = "beta" ]; then dir=beta; fi
+          cd "$dir"
+          npx playwright install --with-deps chromium
+          if [ "$dir" = "beta" ]; then npm run build >/dev/null; fi
+          npx playwright test --project=chromium
+
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r stable/dist/. site/
+          if [ -d beta/dist-beta ]; then mkdir -p site/beta && cp -r beta/dist-beta/. site/beta/; fi
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

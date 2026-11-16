@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111;
+  background: #fff;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+button {
+  touch-action: manipulation;
+}
+/* Board-style: plain and dense. No rounded cards, gradients, shadows, or animations. */
+.btn {
+  @apply inline-flex items-center justify-center border border-gray-500 bg-gray-100 px-3 py-1.5 text-sm text-black hover:bg-gray-200 disabled:opacity-50 disabled:hover:bg-gray-100;
+}
+.btn-primary {
+  @apply inline-flex items-center justify-center border border-navy-dark bg-navy px-3 py-1.5 text-sm text-white hover:bg-navy-dark disabled:opacity-50;
+}
+.btn-danger {
+  @apply inline-flex items-center justify-center border border-red-800 bg-red-700 px-3 py-1.5 text-sm text-white hover:bg-red-800 disabled:opacity-50;
+}
+.field {
+  @apply border border-gray-500 bg-white px-2 py-1 text-sm;
+}
+.panel {
+  @apply border border-gray-400 bg-white;
+}
+.th {
+  @apply border-b border-gray-400 bg-gray-100 px-2 py-1 text-left text-xs font-bold;
+}
+.td {
+  @apply border-b border-gray-200 px-2 py-1 text-sm align-top;
+}
+.link {
+  @apply text-navy underline;
+}
+:focus-visible {
+  outline: 2px dotted #1c4973;
+  outline-offset: 1px;
+}
+.dark-focus :focus-visible {
+  outline-color: #fff;
+}
+.status-font {
+  font-family: 'DejaVu Sans', Verdana, Geneva, sans-serif;
+}
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.text-layer span {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  line-height: 1;
+  transform-origin: 0 0;
+}
