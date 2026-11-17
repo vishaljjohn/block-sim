@@ -6,15 +6,12 @@ import { FULL, segmentRect } from '../lib/layout';
 import { blankQuestion } from '../lib/importer';
 import { applyChoices, redetectLayout, resumeBackgroundText } from '../lib/analyze';
 import { saveExam } from '../lib/store';
-import { go, useLive } from '../ui/hooks';
-import { H1, H2 } from '../ui/Shell';
+import { go, useElementWidth, useLive } from '../ui/hooks';
 import { PageView, type PageApi } from '../ui/PageView';
 import { QuestionView } from '../ui/QuestionView';
 
-type Tool = 'segment' | 'choices' | 'crop';
-
-/** Draw a rectangle on a full page. Calls onRect with page fractions. */
-function DrawPage({ examId, doc, page, width, onRect, children }: { examId: string; doc: PdfDoc; page: number; width: number; onRect: (r: Rect) => void; children?: (api: PageApi) => React.ReactNode }) {
+/** Draw a rectangle on a full page (page fractions). */
+function DrawPage({ examId, doc, page, width, enabled, onRect, children }: { examId: string; doc: PdfDoc; page: number; width: number; enabled: boolean; onRect: (r: Rect) => void; children?: (api: PageApi) => React.ReactNode }) {
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const api = useRef<PageApi | null>(null);
   return (
@@ -24,11 +21,11 @@ function DrawPage({ examId, doc, page, width, onRect, children }: { examId: stri
       page={page}
       crop={FULL}
       width={width}
-      className="border border-gray-500"
-      style={{ cursor: 'crosshair', touchAction: 'none' }}
+      className="border border-gray-400"
+      style={{ cursor: enabled ? 'crosshair' : 'default', touchAction: enabled ? 'none' : 'auto' }}
       handlers={{
         onPointerDown: (e) => {
-          if (!api.current) return;
+          if (!enabled || !api.current) return;
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           const p = api.current.toPage(e.clientX, e.clientY);
           setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
@@ -68,200 +65,241 @@ function norm(d: { x0: number; y0: number; x1: number; y1: number }): Rect {
 
 const renumber = (qs: Question[]) => qs.map((q, i) => ({ ...q, number: i + 1 }));
 
+/** Fix what each question shows and where its answer choices are. Every change saves at once and can be undone. */
 export function LayoutEditor({ examId }: { examId: string }) {
   const [exam, setExam] = useState<Exam | null>(null);
   const [doc, setDoc] = useState<PdfDoc | null>(null);
   const [sel, setSel] = useState(0);
   const [seg, setSeg] = useState(0);
-  const [tool, setTool] = useState<Tool>('segment');
-  const [cropPage, setCropPage] = useState(1);
-  const [dirty, setDirty] = useState(false);
+  const [areaLocked, setAreaLocked] = useState(true);
+  const [choicesLocked, setChoicesLocked] = useState(true);
+  const [redrawStarted, setRedrawStarted] = useState(false);
   const [msg, setMsg] = useState('');
+  const undo = useRef<Exam[]>([]);
+  const redo = useRef<Exam[]>([]);
+  const [, force] = useState(0);
+  const [colRef, colW] = useElementWidth<HTMLDivElement>();
   const texts = useLive<PageText[]>(() => db.pages.where('examId').equals(examId).toArray(), [examId]);
   const textMap = useMemo(() => new Map((texts ?? []).map((t) => [t.page, t])), [texts]);
-  const hasAttempts = useLive(() => db.attempts.where('examId').equals(examId).count(), [examId]);
 
   useEffect(() => {
     db.exams.get(examId).then((e) => e && setExam(e));
     examPdf(examId).then(setDoc, () => {});
   }, [examId]);
 
+  /** apply + save + remember for undo */
+  const update = (e: Exam, note = '') => {
+    if (exam) undo.current.push(exam);
+    if (undo.current.length > 100) undo.current.shift();
+    redo.current = [];
+    setExam(e);
+    void saveExam(e);
+    setMsg(note || 'Saved.');
+    force((n) => n + 1);
+  };
+  const doUndo = () => {
+    const prev = undo.current.pop();
+    if (!prev || !exam) return;
+    redo.current.push(exam);
+    setExam(prev);
+    void saveExam(prev);
+    setMsg('Undone.');
+    force((n) => n + 1);
+  };
+  const doRedo = () => {
+    const next = redo.current.pop();
+    if (!next || !exam) return;
+    undo.current.push(exam);
+    setExam(next);
+    void saveExam(next);
+    setMsg('Redone.');
+    force((n) => n + 1);
+  };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) doRedo();
+        else doUndo();
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  });
+
   if (!exam || !doc) return <div className="text-sm">Loading…</div>;
   const q = exam.questions[Math.min(sel, exam.questions.length - 1)];
-  const s = q?.segments[Math.min(seg, q.segments.length - 1)];
-  const update = (e: Exam) => {
-    setExam(e);
-    setDirty(true);
+  const s = q.segments[Math.min(seg, q.segments.length - 1)];
+  const patchQ = (p: Partial<Question>, note?: string) => update({ ...exam, questions: exam.questions.map((x) => (x.id === q.id ? { ...x, ...p } : x)) }, note);
+  const choose = (i: number) => {
+    setSel(i);
+    setSeg(0);
+    setAreaLocked(true);
+    setChoicesLocked(true);
+    setRedrawStarted(false);
   };
-  const patchQ = (p: Partial<Question>) => update({ ...exam, questions: exam.questions.map((x) => (x.id === q.id ? { ...x, ...p } : x)) });
-  const save = async () => {
-    await saveExam(exam);
-    setDirty(false);
-    setMsg('Saved.');
-  };
-  const nextLetter = String.fromCharCode(65 + (q.choices?.length ?? 0));
+  const pageChoices = (q.choices ?? []).filter((c) => c.page === s.page);
+  const nextLetter = String.fromCharCode(65 + (redrawStarted ? (q.choices?.length ?? 0) : 0));
+  const status = (x: Question) => (x.forceBubbles || !x.choices?.length ? 'bubbles' : `${x.choices.length} choices`);
+  const width = Math.min(900, Math.max(320, colW || 600));
 
   return (
     <div data-testid="layout-editor">
-      <a className="link text-sm" href={`#/exam/${exam.id}/key`} onClick={(e) => { if (dirty && !window.confirm('Leave without saving?')) e.preventDefault(); }}>← Answer key</a>
-      <H1>Layout, crop and choices: {exam.name}</H1>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <button className={tool === 'segment' ? 'btn-primary' : 'btn'} onClick={() => setTool('segment')}>Question areas</button>
-        <button className={tool === 'choices' ? 'btn-primary' : 'btn'} onClick={() => setTool('choices')} data-testid="tool-choices">Fix choices</button>
-        <button className={tool === 'crop' ? 'btn-primary' : 'btn'} onClick={() => setTool('crop')} data-testid="tool-crop">Crop for all pages</button>
-        <span className="flex-1" />
-        {msg && <span className="text-sm">{msg}</span>}
-        <button className="btn-primary" disabled={!dirty} onClick={save} data-testid="layout-save">Save</button>
-        <button className="btn" onClick={async () => { if (dirty) await save(); go(`/exam/${exam.id}/key`); }}>Done</button>
+      <a className="link text-sm" href={`#/exam/${exam.id}/key`}>← Answer key</a>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold">Questions and choices: {exam.name}</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600" data-testid="layout-msg">{msg}</span>
+          <button className="btn" onClick={doUndo} disabled={!undo.current.length} data-testid="undo" title="Undo (⌘Z / Ctrl+Z)">↶ Undo</button>
+          <button className="btn" onClick={doRedo} disabled={!redo.current.length} data-testid="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">↷ Redo</button>
+          <button className="btn-primary" onClick={() => go(`/exam/${exam.id}`)} data-testid="layout-done">Done</button>
+        </div>
+      </div>
+      <div className="mb-3 rounded border border-gray-300 bg-blue-50 p-2 text-sm">
+        <b>Green</b> = what the question shows in the test. <b>Blue</b> = the answer choices you can click. To change one, untick its lock and drag on the page. Changes save at once; use Undo if you change your mind.
       </div>
       {exam.textStatus !== 'done' && (
-        <div className="mb-2 border border-yellow-600 bg-yellow-50 p-2 text-sm">
-          Some pages are still being read in the background ({texts?.length ?? 0} of {exam.pageCount} pages so far). Choice detection improves as they finish.
+        <div className="mb-2 rounded border border-yellow-600 bg-yellow-50 p-2 text-sm">
+          Some pages are still being read ({texts?.length ?? 0} of {exam.pageCount}). Choices appear as they finish.
           <button className="btn ml-2 py-0" onClick={() => resumeBackgroundText(exam.id)}>Continue reading</button>
         </div>
       )}
 
-      {tool === 'crop' ? (
-        <div>
-          <p className="mb-2 text-sm">Each page is trimmed to the question automatically (toolbars, headers and docks in screenshots are removed). If that looks wrong, drag a box around the question area on any page below and it is used for every page.</p>
-          <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
-            <label><input type="radio" checked={!exam.crop && exam.autoCrop} onChange={() => update({ ...exam, crop: null, autoCrop: true })} /> Automatic crop per page</label>
-            <label><input type="radio" checked={!!exam.crop} readOnly /> My crop for every page {exam.crop ? '' : '(drag a box below)'}</label>
-            <label><input type="radio" checked={!exam.crop && !exam.autoCrop} onChange={() => update({ ...exam, crop: null, autoCrop: false })} /> No crop (whole page)</label>
-            <label className="ml-4">
-              Page <input className="field w-16" type="number" min={1} max={exam.pageCount} value={cropPage} onChange={(e) => setCropPage(Math.max(1, Math.min(exam.pageCount, parseInt(e.target.value, 10) || 1)))} />
-            </label>
+      <div className="flex items-start gap-4">
+        {/* question list */}
+        <div className="w-44 shrink-0">
+          <div className="mb-1 text-xs font-bold">Questions ({exam.questions.length})</div>
+          <div className="max-h-[75vh] overflow-y-auto rounded border border-gray-300">
+            {exam.questions.map((x, i) => (
+              <button key={x.id} className="flex w-full justify-between px-2 py-1 text-left text-sm" style={{ background: i === sel ? '#1c4973' : i % 2 ? '#f3f4f6' : '#fff', color: i === sel ? '#fff' : '#000' }} onClick={() => choose(i)} data-testid={`layout-q-${x.number}`}>
+                <span>Q{x.number}</span>
+                <span className="text-[11px] opacity-80">{status(x)}</span>
+              </button>
+            ))}
           </div>
-          <DrawPage examId={exam.id} doc={doc} page={cropPage} width={Math.min(900, window.innerWidth - 80)} onRect={(r) => update({ ...exam, crop: r, autoCrop: false })}>
-            {(api) => {
-              const r = exam.crop ?? (exam.autoCrop ? textMap.get(cropPage)?.autoCrop : null) ?? FULL;
-              return <div style={{ ...api.pos(r), outline: '3px solid #16a34a', pointerEvents: 'none' }} data-testid="crop-box" />;
+        </div>
+
+        {/* page with boxes */}
+        <div className="min-w-0 flex-1" ref={colRef}>
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <b>Question {q.number}</b>
+            {q.segments.map((g, i) => (
+              <button key={i} className={i === seg ? 'btn-primary py-0' : 'btn py-0'} onClick={() => setSeg(i)}>Page {g.page}</button>
+            ))}
+            <button className="btn py-0" onClick={() => { const pg = Math.min(exam.pageCount, Math.max(...q.segments.map((g) => g.page)) + 1); patchQ({ segments: [...q.segments, { page: pg }], areaManual: true }, `Page ${pg} added.`); setSeg(q.segments.length); }} data-testid="add-page">+ Add next page</button>
+            {q.segments.length > 1 && <button className="btn py-0" onClick={() => { patchQ({ segments: q.segments.filter((_, i) => i !== seg), areaManual: true }, 'Page removed.'); setSeg(0); }}>Remove this page</button>}
+          </div>
+          <DrawPage
+            examId={exam.id}
+            doc={doc}
+            page={s.page}
+            width={width}
+            enabled={!areaLocked || !choicesLocked}
+            onRect={(r) => {
+              if (!areaLocked) {
+                patchQ({ segments: q.segments.map((g, i) => (i === seg ? { page: g.page, rect: r } : g)), areaManual: true }, 'Question area changed.');
+                return;
+              }
+              if (!choicesLocked) {
+                const first = !redrawStarted;
+                const base = first ? [] : (q.choices ?? []);
+                const c: ChoiceRegion = { ...r, page: s.page, letter: String.fromCharCode(65 + base.length) };
+                const list = [...base, c];
+                setRedrawStarted(true);
+                patchQ({ choices: list, choiceSource: 'manual', forceBubbles: false, choiceCount: list.length, choiceCountSet: false }, `Choice ${c.letter} drawn.`);
+              }
             }}
+          >
+            {(api) => (
+              <>
+                <div style={{ ...api.pos(segmentRect(exam, s, textMap.get(s.page))), outline: '3px solid #16a34a', pointerEvents: 'none' }} data-testid="area-box" />
+                {pageChoices.map((c) => (
+                  <div key={c.letter} style={{ ...api.pos(c), outline: '2px solid #2563eb', background: 'rgba(37,99,235,0.06)', pointerEvents: 'none' }}>
+                    <span className="absolute -left-5 top-0 bg-blue-600 px-1 text-xs font-bold text-white">{c.letter}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </DrawPage>
         </div>
-      ) : (
-        <div className="flex items-start gap-4">
-          <div className="w-44 shrink-0">
-            <div className="mb-1 text-xs font-bold">Questions ({exam.questions.length})</div>
-            <div className="max-h-[70vh] overflow-y-auto border border-gray-400">
-              {exam.questions.map((x, i) => (
-                <button key={x.id} className="flex w-full justify-between px-2 py-0.5 text-left text-sm" style={{ background: i === sel ? '#1c4973' : i % 2 ? '#eee' : '#fff', color: i === sel ? '#fff' : '#000' }} onClick={() => { setSel(i); setSeg(0); }} data-testid={`layout-q-${x.number}`}>
-                  <span>Q{x.number}</span>
-                  <span className="text-xs">
-                    p{x.segments.map((g) => g.page).join(',')}
-                    {x.choices?.length && !x.forceBubbles ? ` · ${x.choices.length}ch` : ' · bubbles'}
-                  </span>
+
+        {/* controls */}
+        <div className="w-72 shrink-0 space-y-3 text-sm">
+          <div className="rounded border border-gray-300 bg-white p-3">
+            <label className="flex items-center gap-2 font-bold">
+              <input type="checkbox" checked={areaLocked} onChange={(e) => { setAreaLocked(e.target.checked); if (!e.target.checked) setChoicesLocked(true); }} data-testid="lock-area" />
+              Question area locked
+            </label>
+            <p className="mt-1 text-xs text-gray-600">{areaLocked ? 'Untick to redraw what this page shows for the question (for example to include its pictures).' : 'Drag a box on the page around everything the question should show.'}</p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <button className="btn py-0.5 text-xs" onClick={() => patchQ({ segments: q.segments.map((g, i) => (i === seg ? { page: g.page } : g)), areaManual: true }, 'Using the whole page.')}>Use whole page</button>
+              {s.rect && (
+                <button className="btn py-0.5 text-xs" onClick={() => update({ ...exam, crop: s.rect!, autoCrop: false }, 'This area is now used on every page.')} data-testid="area-all-pages">
+                  Use this area on every page
                 </button>
-              ))}
+              )}
+              {(exam.crop || !exam.autoCrop) && (
+                <button className="btn py-0.5 text-xs" onClick={() => update({ ...exam, crop: null, autoCrop: true }, 'Automatic trimming is back on.')}>Back to automatic trimming</button>
+              )}
             </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <H2>
-              Question {q.number}: part {Math.min(seg, q.segments.length - 1) + 1} of {q.segments.length} (page {s.page})
-            </H2>
-            <div className="mb-2 flex flex-wrap gap-1 text-sm">
-              {q.segments.map((g, i) => (
-                <button key={i} className={i === seg ? 'btn-primary py-0' : 'btn py-0'} onClick={() => setSeg(i)}>Part {i + 1} (p{g.page}{g.rect ? ', area' : ''})</button>
-              ))}
-              {tool === 'segment' && (
-                <>
-                  <button className="btn py-0" onClick={() => { const pg = Math.min(exam.pageCount, Math.max(...q.segments.map((g) => g.page)) + 1); patchQ({ segments: [...q.segments, { page: pg }], choices: q.choiceSource === 'manual' ? q.choices : undefined }); setSeg(q.segments.length); }}>+ Add next page</button>
-                  {q.segments.length > 1 && <button className="btn py-0" onClick={() => { patchQ({ segments: q.segments.filter((_, i) => i !== seg) }); setSeg(0); }}>Remove this part</button>}
-                  <button className="btn py-0" onClick={() => patchQ({ segments: q.segments.map((g, i) => (i === seg ? { page: g.page } : g)) })}>Use whole page</button>
-                  <label className="ml-2">
-                    page <input className="field w-14 py-0" type="number" min={1} max={exam.pageCount} value={s.page} onChange={(e) => { const pg = Math.max(1, Math.min(exam.pageCount, parseInt(e.target.value, 10) || 1)); patchQ({ segments: q.segments.map((g, i) => (i === seg ? { page: pg } : g)) }); }} />
-                  </label>
-                </>
-              )}
+
+          <div className="rounded border border-gray-300 bg-white p-3">
+            <label className="flex items-center gap-2 font-bold">
+              <input type="checkbox" checked={choicesLocked} onChange={(e) => { setChoicesLocked(e.target.checked); setRedrawStarted(false); if (!e.target.checked) setAreaLocked(true); }} data-testid="lock-choices" />
+              Answer choices locked
+            </label>
+            <p className="mt-1 text-xs text-gray-600">
+              {choicesLocked ? `${q.choices?.length ? `${q.choices.length} choices found.` : 'No choices found: bubbles are used.'} Untick to draw them yourself.` : `Drag a box around each choice in order. The next box is ${nextLetter}.`}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <button
+                className="btn py-0.5 text-xs"
+                onClick={() => {
+                  const out = applyChoices({ ...exam, questions: [{ ...q, choiceSource: undefined }] }, textMap)[0];
+                  patchQ({ choices: out.choices, choiceSource: out.choiceSource, choiceTexts: out.choiceTexts, choiceCountSet: false }, out.choices?.length ? `Found ${out.choices.length} choices.` : 'No choices found: bubbles will be used.');
+                }}
+              >
+                Find choices automatically
+              </button>
+              <label className="flex items-center gap-1 text-xs">
+                <input type="checkbox" checked={!!q.forceBubbles} onChange={(e) => patchQ({ forceBubbles: e.target.checked }, e.target.checked ? 'This question uses bubbles.' : 'This question uses clickable choices.')} data-testid="force-bubbles" /> Use bubbles for this question
+              </label>
             </div>
-            {tool === 'segment' ? (
-              <p className="mb-2 text-xs text-gray-700">The green box is what is shown for this part. Drag on the page to draw a new area (for pages with several questions).</p>
-            ) : (
-              <p className="mb-2 text-xs text-gray-700">
-                Drag a box around each answer choice in order: the next box becomes <b>{nextLetter}</b>. {q.choices?.length ? `${q.choices.length} choice boxes so far.` : 'No choice boxes yet.'}
-              </p>
-            )}
-            <DrawPage
-              examId={exam.id}
-              doc={doc}
-              page={s.page}
-              width={Math.min(820, window.innerWidth - 300)}
-              onRect={(r) => {
-                if (tool === 'segment') patchQ({ segments: q.segments.map((g, i) => (i === seg ? { page: g.page, rect: r } : g)), choices: q.choiceSource === 'manual' ? q.choices : undefined });
-                else {
-                  const c: ChoiceRegion = { ...r, page: s.page, letter: nextLetter };
-                  const list = [...(q.choices ?? []), c];
-                  patchQ({ choices: list, choiceSource: 'manual', forceBubbles: false, choiceCount: Math.max(q.choiceCount, list.length) });
-                }
+          </div>
+
+          <div className="rounded border border-gray-300 bg-white p-3">
+            <div className="mb-1 font-bold">Question</div>
+            <div className="flex flex-wrap gap-1">
+              <button className="btn py-0.5 text-xs" onClick={() => { const qs = [...exam.questions]; qs.splice(sel + 1, 0, { ...blankQuestion(exam.id, 0, [s.page]), areaManual: true }); update({ ...exam, questions: renumber(qs) }, 'Question inserted.'); choose(sel + 1); }}>Insert one after</button>
+              {sel < exam.questions.length - 1 && (
+                <button className="btn py-0.5 text-xs" onClick={() => { const nx = exam.questions[sel + 1]; const merged = { ...q, segments: [...q.segments, ...nx.segments], choices: undefined, choiceSource: undefined, areaManual: true }; update({ ...exam, questions: renumber(exam.questions.filter((_, i) => i !== sel + 1).map((x, i) => (i === sel ? merged : x))) }, 'Merged with the next question.'); }}>
+                  Merge with next
+                </button>
+              )}
+              {exam.questions.length > 1 && <button className="btn py-0.5 text-xs" onClick={() => { update({ ...exam, questions: renumber(exam.questions.filter((_, i) => i !== sel)) }, `Question ${q.number} deleted.`); choose(Math.max(0, sel - 1)); }}>Delete question</button>}
+            </div>
+            <button
+              className="btn mt-2 w-full py-0.5 text-xs"
+              onClick={async () => {
+                const qs = await redetectLayout(exam);
+                if (!qs) return setMsg('Could not find question numbers on the pages; nothing changed.');
+                update({ ...exam, questions: qs.map((x, i) => ({ ...x, answer: exam.questions[i]?.answer ?? x.answer, explanation: exam.questions[i]?.explanation ?? x.explanation })) }, `Found ${qs.length} questions.`);
               }}
             >
-              {(api) => (
-                <>
-                  <div style={{ ...api.pos(segmentRect(exam, s, textMap.get(s.page))), outline: '3px solid #16a34a', pointerEvents: 'none' }} />
-                  {(q.choices ?? [])
-                    .filter((c) => c.page === s.page)
-                    .map((c) => (
-                      <div key={c.letter} style={{ ...api.pos(c), outline: '2px solid #2563eb', pointerEvents: 'none' }}>
-                        <span className="absolute -left-5 top-0 bg-blue-600 px-1 text-xs font-bold text-white">{c.letter}</span>
-                      </div>
-                    ))}
-                </>
-              )}
-            </DrawPage>
-            <div className="mt-2 flex flex-wrap gap-2 text-sm">
-              {tool === 'choices' ? (
-                <>
-                  <button className="btn" onClick={() => patchQ({ choices: q.choices?.slice(0, -1), choiceSource: 'manual' })} disabled={!q.choices?.length}>Undo last box</button>
-                  <button className="btn" onClick={() => patchQ({ choices: [], choiceSource: 'manual' })} data-testid="clear-choices">Clear boxes</button>
-                  <button
-                    className="btn"
-                    onClick={() => {
-                      const out = applyChoices({ ...exam, questions: [{ ...q, choiceSource: undefined }] }, textMap)[0];
-                      patchQ({ choices: out.choices, choiceSource: out.choiceSource, choiceTexts: out.choiceTexts });
-                      setMsg(out.choices?.length ? `Found ${out.choices.length} choices.` : 'No choices found on this question: bubbles will be used.');
-                    }}
-                  >
-                    Detect again
-                  </button>
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={!!q.forceBubbles} onChange={(e) => patchQ({ forceBubbles: e.target.checked })} data-testid="force-bubbles" /> Use bubbles for this question
-                  </label>
-                </>
-              ) : (
-                <>
-                  <button className="btn" onClick={() => { const qs = [...exam.questions]; const nq = blankQuestion(exam.id, 0, [s.page]); qs.splice(sel + 1, 0, nq); update({ ...exam, questions: renumber(qs) }); setSel(sel + 1); setSeg(0); }}>Insert a question after this one</button>
-                  {sel < exam.questions.length - 1 && (
-                    <button className="btn" onClick={() => { const nx = exam.questions[sel + 1]; const merged = { ...q, segments: [...q.segments, ...nx.segments], choices: undefined, choiceSource: undefined }; update({ ...exam, questions: renumber(exam.questions.filter((_, i) => i !== sel + 1).map((x, i) => (i === sel ? merged : x))) }); }}>
-                      Merge with next question
-                    </button>
-                  )}
-                  {exam.questions.length > 1 && (
-                    <button className="btn" onClick={() => { if (window.confirm(`Delete question ${q.number}? Later questions are renumbered.`)) { update({ ...exam, questions: renumber(exam.questions.filter((_, i) => i !== sel)) }); setSel(Math.max(0, sel - 1)); setSeg(0); } }}>
-                      Delete question
-                    </button>
-                  )}
-                  <button
-                    className="btn"
-                    onClick={async () => {
-                      if (hasAttempts && !window.confirm('Re-detect all question areas from the page text? Answers stay attached to question numbers.')) return;
-                      const qs = await redetectLayout(exam);
-                      if (!qs) return setMsg('Could not find question numbers on the pages; keeping the current layout.');
-                      update({ ...exam, questions: qs.map((x, i) => ({ ...x, answer: exam.questions[i]?.answer ?? x.answer, explanation: exam.questions[i]?.explanation ?? x.explanation, tags: exam.questions[i]?.tags ?? x.tags })) });
-                      setMsg(`Found ${qs.length} questions.`);
-                    }}
-                  >
-                    Detect all question areas again
-                  </button>
-                </>
-              )}
-            </div>
-            <H2>How it looks in the test</H2>
-            <div className="max-w-[760px] border border-gray-400 p-2">
-              <QuestionView exam={exam} question={q} doc={doc} texts={textMap} width={Math.min(740, window.innerWidth - 320)} readOnly item={{ answer: q.answer || null, highlights: [], strikes: [] }} />
+              Find all questions again (automatic)
+            </button>
+          </div>
+
+          <div className="rounded border border-gray-300 bg-white p-2">
+            <div className="mb-1 text-xs font-bold">How it looks in the test</div>
+            <div className="max-h-80 overflow-auto">
+              <QuestionView exam={exam} question={q} doc={doc} texts={textMap} width={262} readOnly item={{ answer: null, highlights: [], strikes: [] }} />
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

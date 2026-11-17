@@ -39,7 +39,7 @@ export async function debugInfo(extra: Record<string, unknown>): Promise<string>
   } catch {}
   return JSON.stringify(
     {
-      app: 'Block Sim',
+      app: 'Test Simulator',
       version: APP_VERSION,
       channel: CHANNEL,
       built: BUILD_TIME,

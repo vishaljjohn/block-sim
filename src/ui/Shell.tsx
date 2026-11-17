@@ -13,7 +13,7 @@ export function Shell({ path, children, wide }: { path: string; children: ReactN
     <div className="flex min-h-full flex-col">
       <header className="keep-colors dark-focus flex flex-wrap items-center gap-x-6 gap-y-1 bg-navy px-4 py-2 text-white">
         <a href="#/" className="status-font text-lg font-bold">
-          Block Sim
+          Test Simulator
           {IS_BETA && <span className="ml-2 bg-yellow-300 px-1 text-xs font-bold text-black" data-testid="beta-badge">BETA</span>}
         </a>
         <nav className="flex flex-wrap gap-1 text-sm" aria-label="Main">
@@ -26,7 +26,7 @@ export function Shell({ path, children, wide }: { path: string; children: ReactN
       </header>
       <main className={'mx-auto w-full flex-1 px-4 py-4 ' + (wide ? 'max-w-[1400px]' : 'max-w-5xl')}>{children}</main>
       <footer className="border-t border-gray-300 px-4 py-2 text-xs text-gray-700">
-        Block Sim {APP_VERSION}
+        Test Simulator {APP_VERSION}
         {IS_BETA ? ' (beta)' : ''} · Everything stays on this device ·{' '}
         <a className="link" href={BUG_REPORT_URL} target="_blank" rel="noreferrer noopener">
           Report a bug

@@ -8,6 +8,7 @@ import { fmtDuration } from '../lib/timer';
 import { fmtDateTime, useLive } from '../ui/hooks';
 import { H1, H2 } from '../ui/Shell';
 import { TrendChart } from '../ui/charts';
+import { ScoreBar } from '../ui/ScoreBar';
 
 export function ExamDetail({ examId }: { examId: string }) {
   const exam = useLive(() => db.exams.get(examId).then((e) => e ?? null), [examId]);
@@ -20,7 +21,6 @@ export function ExamDetail({ examId }: { examId: string }) {
   const full = done.filter((a) => a.items.length >= Math.min(exam.questions.length, 5));
   const lastTwo = done.slice(-2);
   const fl = lastTwo.length === 2 ? flips(lastTwo[0], lastTwo[1]) : [];
-  const tags = [...new Set(exam.questions.flatMap((q) => q.tags))];
   return (
     <div data-testid="exam-detail">
       <a className="link text-sm" href="#/">← Library</a>
@@ -28,7 +28,6 @@ export function ExamDetail({ examId }: { examId: string }) {
       <div className="mb-3 text-sm text-gray-700">
         {exam.subject && <>{exam.subject} · </>}
         {exam.questions.length} questions · {exam.questions.filter((q) => q.answer).length} with answers · {exam.pageCount} pages
-        {tags.length > 0 && <> · tags: {tags.slice(0, 12).join(', ')}{tags.length > 12 ? '…' : ''}</>}
       </div>
       <div className="mb-3 flex flex-wrap gap-2">
         {exam.keyChecked ? (
@@ -40,12 +39,12 @@ export function ExamDetail({ examId }: { examId: string }) {
           <a key={a.id} className="btn" href={`#/test/${a.id}`}>Resume unfinished block</a>
         ))}
         <a className="btn" href={`#/exam/${exam.id}/key`}>Edit answer key</a>
-        <a className="btn" href={`#/exam/${exam.id}/layout`}>Layout, crop and choices</a>
+        <a className="btn" href={`#/exam/${exam.id}/layout`}>Questions, pictures and choices…</a>
         <button
           className="btn"
           onClick={async () => {
             setBusy('Preparing…');
-            downloadBlob(await exportBackup({ examId: exam.id }), `block-sim-exam-${exam.name.replace(/[^\w-]+/g, '_').slice(0, 40)}.zip`);
+            downloadBlob(await exportBackup({ examId: exam.id }), `test-simulator-exam-${exam.name.replace(/[^\w-]+/g, '_').slice(0, 40)}.zip`);
             setBusy('Exported. Restore it on any computer from Settings → Restore.');
           }}
         >
@@ -77,7 +76,16 @@ export function ExamDetail({ examId }: { examId: string }) {
                   <td className="td">{fmtDateTime(a.completedAt ?? a.createdAt)}</td>
                   <td className="td capitalize">{a.mode}{a.status === 'active' ? ' (in progress)' : ''}</td>
                   <td className="td">{a.items.length}</td>
-                  <td className="td">{a.status === 'completed' ? `${Math.round(s.pct)}% (${s.correct}/${s.total})` : '—'}</td>
+                  <td className="td">
+                    {a.status === 'completed' ? (
+                      <div className="flex min-w-[160px] items-center gap-2">
+                        <b className="w-10 text-right">{Math.round(s.pct)}%</b>
+                        <ScoreBar correct={s.correct} wrong={s.wrong} blank={s.blank} />
+                      </div>
+                    ) : (
+                      <span className="text-gray-600">{a.items.filter((it) => it.answer).length} of {a.items.length} answered</span>
+                    )}
+                  </td>
                   <td className="td">{fmtDuration(s.timeMs)}</td>
                   <td className="td">
                     <div className="flex flex-wrap gap-1">

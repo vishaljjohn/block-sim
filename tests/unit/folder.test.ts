@@ -58,7 +58,7 @@ class FakeDir {
   }
 }
 
-const shared = new FakeDir('Block Sim');
+const shared = new FakeDir('Test Simulator');
 
 beforeEach(() => {
   vi.resetModules();

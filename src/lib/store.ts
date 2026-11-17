@@ -35,7 +35,7 @@ export function setReadOnly(v: boolean): void {
   readOnly = v;
 }
 function guard() {
-  if (readOnly) throw new Error('Block Sim is open in another tab; this tab is read-only.');
+  if (readOnly) throw new Error('Test Simulator is open in another tab; this tab is read-only.');
 }
 
 export async function saveExam(exam: Exam, touch = true): Promise<void> {

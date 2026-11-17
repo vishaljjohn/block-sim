@@ -84,7 +84,7 @@ export function SettingsPage() {
           </>
         ) : (
           <>
-            <p>Pick a folder (for example “Block Sim” inside iCloud Drive, OneDrive, Dropbox or Google Drive). Every exam and attempt is saved there as its own file. On a new computer, pick the same folder and everything comes back.</p>
+            <p>Pick a folder (for example “Test Simulator” inside iCloud Drive, OneDrive, Dropbox or Google Drive). Every exam and attempt is saved there as its own file. On a new computer, pick the same folder and everything comes back.</p>
             <button className="btn-primary mt-2" onClick={async () => { if (await chooseFolder()) setMsg('Data folder connected. Everything is being saved there.'); }} data-testid="choose-folder">Choose a data folder</button>
           </>
         )}
@@ -132,7 +132,7 @@ export function SettingsPage() {
             onClick={async () => {
               const e = examList?.find((x) => x.id === oneExam);
               setMsg('Preparing…');
-              downloadBlob(await exportBackup({ examId: oneExam }), `block-sim-exam-${(e?.name ?? 'exam').replace(/[^\w-]+/g, '_').slice(0, 40)}.zip`);
+              downloadBlob(await exportBackup({ examId: oneExam }), `test-simulator-exam-${(e?.name ?? 'exam').replace(/[^\w-]+/g, '_').slice(0, 40)}.zip`);
               setMsg('Exam exported. Restore it on any computer with “Restore from a backup file”.');
             }}
           >
@@ -144,7 +144,7 @@ export function SettingsPage() {
 
       <H2>Automatic snapshots</H2>
       <div className="text-sm">
-        <p>Block Sim keeps the last 5 automatic safety copies of your history (answers, notes, keys; not the PDFs).</p>
+        <p>Test Simulator keeps the last 5 automatic safety copies of your history (answers, notes, keys; not the PDFs).</p>
         {snaps && snaps.length > 0 ? (
           <table className="mt-1 border-collapse border border-gray-400" data-testid="snapshots">
             <tbody>
@@ -193,10 +193,10 @@ export function SettingsPage() {
       <H2>About and troubleshooting</H2>
       <div className="text-sm">
         <p data-testid="app-version">
-          Block Sim version {APP_VERSION} ({CHANNEL}) · built {BUILD_TIME.slice(0, 16).replace('T', ' ')}
+          Test Simulator version {APP_VERSION} ({CHANNEL}) · built {BUILD_TIME.slice(0, 16).replace('T', ' ')}
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button className="btn" data-testid="export-debug" onClick={async () => downloadText(await debugInfo({ settings, counts, folder: { connected: folder.connected, supported: folder.supported } }), 'block-sim-debug.json', 'application/json')}>
+          <button className="btn" data-testid="export-debug" onClick={async () => downloadText(await debugInfo({ settings, counts, folder: { connected: folder.connected, supported: folder.supported } }), 'test-simulator-debug.json', 'application/json')}>
             Export debug info
           </button>
           <a className="btn" href="#/welcome">Show the welcome screen again</a>

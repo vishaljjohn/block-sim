@@ -1,4 +1,4 @@
-/* Block Sim service worker. Generated at build time; do not edit dist/sw.js by hand. */
+/* Test Simulator service worker. Generated at build time; do not edit dist/sw.js by hand. */
 const CHANNEL = "__CHANNEL__";
 const BASE = "__BASE__";
 const BUILD_ID = "__BUILD_ID__";

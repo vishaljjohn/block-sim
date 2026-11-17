@@ -16,7 +16,7 @@ export function Welcome() {
   const b = browserKind();
   return (
     <div className="max-w-3xl" data-testid="welcome">
-      <H1>Welcome to Block Sim</H1>
+      <H1>Welcome to Test Simulator</H1>
       <p className="mb-2 text-sm">
         Load any practice-question PDF and its answer key, then take it in a board-style test screen: timer, question list, mark, highlight, strike out, lab values and calculator. Every attempt is saved so you can come back weeks later and review what you missed.
       </p>
@@ -30,7 +30,7 @@ export function Welcome() {
           <p className="text-sm text-green-800" data-testid="welcome-folder-ok">Saving to “{folder.name}”.</p>
         ) : (
           <div className="text-sm">
-            <p className="mb-2">Recommended: pick a folder called “Block Sim”, ideally inside iCloud Drive, OneDrive, Dropbox or Google Drive. Everything is saved there as files, so it survives browser clean-ups and moves with you to a new computer.</p>
+            <p className="mb-2">Recommended: pick a folder called “Test Simulator”, ideally inside iCloud Drive, OneDrive, Dropbox or Google Drive. Everything is saved there as files, so it survives browser clean-ups and moves with you to a new computer.</p>
             <button className="btn-primary" onClick={() => void chooseFolder()} data-testid="welcome-folder">Choose a data folder</button>
             <span className="ml-3 text-gray-700">or continue without one (history stays in this browser; use Back up now from time to time).</span>
           </div>
@@ -46,6 +46,7 @@ export function Welcome() {
       <div className="flex flex-wrap gap-2">
         <button className="btn-primary" onClick={() => void finish(`/setup?exam=${DEMO_ID}`)} data-testid="welcome-demo">Try the 5-question demo exam</button>
         <button className="btn" onClick={() => void finish('/import')}>Import my own PDF</button>
+        <button className="btn" onClick={() => void finish('/import?folder=1')}>Import a whole folder of exams</button>
         <button className="btn" onClick={() => void finish('/')} data-testid="welcome-skip">Go to the Library</button>
       </div>
     </div>

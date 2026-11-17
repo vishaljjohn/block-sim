@@ -1,7 +1,7 @@
 /**
  * Data-folder storage (File System Access API, Chrome/Edge on desktop).
  *
- * The user picks a "Block Sim" folder once. Every exam, PDF, OCR cache, attempt and review log is saved there
+ * The user picks a "Test Simulator" folder once. Every exam, PDF, OCR cache, attempt and review log is saved there
  * as its own versioned JSON file (never one big file). On launch the folder is read and merged into IndexedDB
  * by ID, so a cloud-synced folder edited on two computers never overwrites data. IndexedDB stays the working
  * copy and the full fallback everywhere else.

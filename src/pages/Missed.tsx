@@ -96,7 +96,7 @@ export function Missed() {
     const out: (string | number)[][] = [['Exam', 'Question #', 'Date missed', 'My answer', 'Correct answer', 'Why listed', 'Reason', 'Times missed', 'Last reviewed', 'Next due', 'Status']];
     for (const r of filtered)
       out.push([examById.get(r.examId)?.name ?? '(deleted exam)', r.number, fmtDate(r.missedAt), r.myAnswer ?? '', r.key ?? '', r.why.join(' + '), MISS_REASONS.find((m) => m.id === r.reason)?.label ?? '', r.timesMissed, fmtDate(r.lastReviewed), r.schedule.dueAt ? fmtDate(r.schedule.dueAt) : '', r.schedule.status]);
-    downloadText(toCsv(out), `block-sim-missed-${new Date().toISOString().slice(0, 10)}.csv`);
+    downloadText(toCsv(out), `test-simulator-missed-${new Date().toISOString().slice(0, 10)}.csv`);
   };
   const Sel = ({ value, set, children, label, testId }: { value: string; set: (v: string) => void; children: React.ReactNode; label: string; testId?: string }) => (
     <label className="text-sm">
@@ -114,7 +114,7 @@ export function Missed() {
         Every question you answered wrong or marked in a finished block, across all exams. Redo them blind on a spaced schedule (3, 7, 21, 60 days); two correct redos on different days = Mastered.
       </p>
       {rows.length === 0 ? (
-        <div className="border border-gray-400 p-4 text-sm">Nothing here yet. Finish a block and the questions you miss, guess or mark show up here.</div>
+        <div className="border border-gray-400 p-4 text-sm">Nothing here yet. Finish a block and the questions you miss or mark show up here.</div>
       ) : (
         <>
           <div className="mb-2 flex flex-wrap items-end gap-x-4 gap-y-2 border border-gray-400 bg-gray-50 p-2">
@@ -153,7 +153,7 @@ export function Missed() {
             </Sel>
             <label className="text-sm">
               Search{' '}
-              <input className="field w-48" value={q} onChange={(e) => setQ(e.target.value)} placeholder={hasText ? 'words in the question' : 'exam, tag, explanation'} data-testid="f-search" />
+              <input className="field w-48" value={q} onChange={(e) => setQ(e.target.value)} placeholder={hasText ? 'words in the question' : 'exam or explanation words'} data-testid="f-search" />
             </label>
           </div>
           <div className="mb-2 flex flex-wrap items-center gap-2">

@@ -24,7 +24,7 @@ export function wrap(font, text, size, maxWidth) {
 export async function buildDemoPdf() {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
-  doc.setTitle('Block Sim demo exam (original sample questions)');
+  doc.setTitle('Test Simulator demo exam (original sample questions)');
   demoQuestions.forEach((q, i) => {
     const page = doc.addPage([792, 612]);
     let y = 560;

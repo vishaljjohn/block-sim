@@ -119,7 +119,7 @@ export function KeyCheck({ examId }: { examId: string }) {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <button className="btn" onClick={jump} disabled={!warnings.length} data-testid="next-warning">Jump to next warning</button>
         <button className="btn" onClick={() => setReread(true)} data-testid="reread-key">Read key from text or PDF…</button>
-        <a className="btn" href={`#/exam/${exam.id}/layout`} onClick={(e) => { if (dirty && !window.confirm('Leave without saving your changes to the key?')) e.preventDefault(); }}>Fix page layout, crop and choices…</a>
+        <a className="btn" href={`#/exam/${exam.id}/layout`} onClick={(e) => { if (dirty && !window.confirm('Leave without saving your changes to the key?')) e.preventDefault(); }}>Questions, pictures and choices…</a>
         <span className="flex-1" />
         {busy && <span className="text-sm">{busy}</span>}
         <button className="btn" onClick={() => void save(false)} disabled={!dirty} data-testid="key-save">Save</button>

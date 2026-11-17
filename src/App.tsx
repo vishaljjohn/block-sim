@@ -68,8 +68,8 @@ export function App() {
   if (tab === 'blocked') {
     return (
       <div className="mx-auto max-w-lg p-8" data-testid="tab-guard">
-        <h1 className="mb-2 text-xl font-bold">Block Sim is open elsewhere</h1>
-        <p className="mb-4 text-sm">Block Sim is already open in another tab or window. To keep your saved answers from conflicting, only one can be used at a time.</p>
+        <h1 className="mb-2 text-xl font-bold">Test Simulator is open elsewhere</h1>
+        <p className="mb-4 text-sm">Test Simulator is already open in another tab or window. To keep your saved answers from conflicting, only one can be used at a time.</p>
         <button
           className="btn-primary"
           data-testid="take-over"
@@ -79,7 +79,7 @@ export function App() {
             window.location.reload();
           }}
         >
-          Use Block Sim here instead
+          Use Test Simulator here instead
         </button>
         <p className="mt-3 text-xs text-gray-700">The other tab will stop and show this message.</p>
       </div>
@@ -88,8 +88,8 @@ export function App() {
   if (fatal === 'VERSION') {
     return (
       <div className="mx-auto max-w-lg p-8">
-        <h1 className="mb-2 text-xl font-bold">Please update Block Sim</h1>
-        <p className="mb-2 text-sm">Your data was saved by a newer version of Block Sim than the one loaded now. Nothing has been changed or lost. Close every Block Sim window and open it again to get the newer version.</p>
+        <h1 className="mb-2 text-xl font-bold">Please update Test Simulator</h1>
+        <p className="mb-2 text-sm">Your data was saved by a newer version of Test Simulator than the one loaded now. Nothing has been changed or lost. Close every Test Simulator window and open it again to get the newer version.</p>
         <button className="btn mt-3" onClick={() => window.location.reload()}>Reload</button>
       </div>
     );
@@ -97,14 +97,14 @@ export function App() {
   if (fatal) {
     return (
       <div className="mx-auto max-w-lg p-8">
-        <h1 className="mb-2 text-xl font-bold">Block Sim could not open its storage</h1>
+        <h1 className="mb-2 text-xl font-bold">Test Simulator could not open its storage</h1>
         <p className="mb-2 text-sm">Your data has not been changed. This usually happens in a private/incognito window or when the browser's storage is full or blocked.</p>
         <pre className="whitespace-pre-wrap text-xs">{fatal}</pre>
         <button className="btn mt-3" onClick={() => window.location.reload()}>Try again</button>
       </div>
     );
   }
-  if (!ready) return <div className="p-6 text-sm">Loading Block Sim…</div>;
+  if (!ready) return <div className="p-6 text-sm">Loading Test Simulator…</div>;
 
   const [p0, p1, p2] = route.parts;
   const inBlock = p0 === 'test';

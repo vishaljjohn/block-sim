@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { HighlightColor } from '../types';
 import { HIGHLIGHT_RGBA } from '../lib/display';
 
@@ -44,6 +44,7 @@ export function HighlightableText({ text, highlights, color, onChange, testId }:
     if (!el || !root.current?.contains(el)) return null;
     return Number(el.dataset.o) + (node.nodeType === Node.TEXT_NODE ? off : 0);
   };
+  const justMade = useRef(0);
   const onUp = () => {
     if (!onChange) return;
     const sel = window.getSelection();
@@ -52,9 +53,22 @@ export function HighlightableText({ text, highlights, color, onChange, testId }:
     const a = offsetOf(r.startContainer, r.startOffset);
     const b = offsetOf(r.endContainer, r.endOffset);
     if (a == null || b == null || a === b) return;
+    justMade.current = Date.now();
     onChange(addTextRange(highlights, a, b, color));
     sel.removeAllRanges();
   };
+  // listen on the document: a drag that ends outside the text (past the end of a line) still counts
+  const upRef = useRef(onUp);
+  upRef.current = onUp;
+  useEffect(() => {
+    const h = () => upRef.current();
+    document.addEventListener('mouseup', h);
+    document.addEventListener('touchend', h);
+    return () => {
+      document.removeEventListener('mouseup', h);
+      document.removeEventListener('touchend', h);
+    };
+  }, []);
   const segments = (p: { start: number; text: string }) => {
     const end = p.start + p.text.length;
     const cuts = new Set([p.start, end]);
@@ -72,7 +86,7 @@ export function HighlightableText({ text, highlights, color, onChange, testId }:
     });
   };
   return (
-    <div ref={root} onMouseUp={onUp} onTouchEnd={onUp} data-testid={testId} style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
+    <div ref={root} data-testid={testId} style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
       {paras.map((p, i) => (
         <p key={i} className="mb-3 whitespace-pre-wrap">
           {segments(p).map((g) =>
@@ -83,7 +97,11 @@ export function HighlightableText({ text, highlights, color, onChange, testId }:
                 data-testid="expl-highlight"
                 title={onChange ? 'Click to remove this highlight' : undefined}
                 style={{ background: HIGHLIGHT_RGBA[g.h.color ?? 'yellow'], color: 'inherit', cursor: onChange ? 'pointer' : 'text' }}
-                onClick={() => onChange?.(highlights.filter((x) => x !== g.h))}
+                onClick={() => {
+                  // the click that ends a drag must not remove the highlight it just made
+                  if (Date.now() - justMade.current < 400) return;
+                  onChange?.(highlights.filter((x) => x !== g.h));
+                }}
               >
                 {text.slice(g.s, g.e)}
               </mark>

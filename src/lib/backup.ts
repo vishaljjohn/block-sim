@@ -113,7 +113,7 @@ export interface MergeResult {
  */
 export async function mergeIntoDb(files: FileSet, opts: { resurrect?: boolean } = {}): Promise<MergeResult> {
   const man = files.json.get('manifest.json') as { app?: string } | undefined;
-  if (man && man.app && man.app !== 'block-sim') throw new Error('This file is not a Block Sim backup.');
+  if (man && man.app && man.app !== 'block-sim') throw new Error('This file is not a Test Simulator backup.');
   const inExams: Exam[] = [];
   const inAttempts: Attempt[] = [];
   let inReviews: ReviewRecord[] = [];

@@ -1,4 +1,4 @@
-# Block Sim: project rules
+# Test Simulator: project rules
 
 - 100% client-side static site. **No external requests at runtime**: no CDNs, analytics, fonts, APIs or keys.
   Every library (pdf.js + worker, Tesseract.js + English data) is bundled from node_modules by

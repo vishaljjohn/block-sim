@@ -1,10 +1,11 @@
-# Block Sim
+# Test Simulator
 
 Free practice-exam app for medical students. Load **any** question PDF and its answer key, then take it in a
 board-style test screen. Every attempt is saved, so you can come back weeks or months later and review what you
 missed.
 
 - **Open it:** https://www.vishaljohn.com/block-sim/
+- **Try new features first (beta):** https://www.vishaljohn.com/block-sim/beta/ (its own separate history)
 - Works best in **Chrome or Edge on a laptop**. Also works in Safari and on iPad (touch).
 - Nothing you load ever leaves your computer. No accounts, no uploads, no tracking. It works offline once opened.
 
@@ -15,14 +16,14 @@ missed.
 ### 1. Open the link and install it
 Open the link above in Chrome or Edge. The welcome screen walks you through three things.
 To install: click the install icon at the right end of the address bar (a small monitor with an arrow), or
-⋮ menu → **Install Block Sim** (Edge: **Apps → Install this site as an app**). On iPad: Share → **Add to Home Screen**.
-Installed, Block Sim opens in its own window and works with no internet.
+⋮ menu → **Install Test Simulator** (Edge: **Apps → Install this site as an app**). On iPad: Share → **Add to Home Screen**.
+Installed, Test Simulator opens in its own window and works with no internet.
 
 ### 2. Pick a data folder (Chrome/Edge only, recommended)
 On the welcome screen (or **Settings → Data folder**) choose **Choose a data folder** and make a new folder called
-`Block Sim`, ideally inside iCloud Drive, OneDrive, Dropbox or Google Drive. Every exam and attempt is saved there
+`Test Simulator`, ideally inside iCloud Drive, OneDrive, Dropbox or Google Drive. Every exam and attempt is saved there
 as its own file, so your history survives browser clean-ups and follows you to a new computer.
-After a browser restart, Block Sim may ask you to click **Reconnect data folder** once: that's normal.
+After a browser restart, Test Simulator may ask you to click **Reconnect data folder** once: that's normal.
 
 No folder (Safari, iPad, or you skipped it)? Your history lives in the browser. The Library shows
 **"Last backup: X days ago"**; click **Back up now** every week or two and keep the file somewhere safe.
@@ -35,18 +36,25 @@ No folder (Safari, iPad, or you skipped it)? Your history lives in the browser. 
 3. Answer key: a separate PDF; the end of the same PDF (type the page where the key starts); after each question
    (hidden while you take the exam); **paste it** (`1 C, 2 A, 3 B…`, `1. C`, or one letter per line all work); or
    no key yet (type the answers on the next screen). Keys that mark the answer only with a highlight work too.
-4. Click **Continue**.
+4. Optional: type a **Folder** (Surgery, OBGYN, Internal Medicine…) to sort it in the Library.
+5. Click **Continue**.
+
+**A whole folder at once:** **Import → A whole folder of exams**. Make one folder with a subfolder per subject, put
+each exam's question PDF and answer PDF in its subject folder named so they match (`5 Q.pdf` + `5A.pdf`), and pick
+the top folder. Every pair is imported and each subfolder becomes a Library folder. In Chrome/Edge, tick
+**Keep my Test Simulator data in this folder**: the app then saves its data in a `Test Simulator Data` subfolder next
+to your PDFs and reads the PDFs from where they are instead of copying them.
 
 Only import materials you have the right to use.
 
 ### 4. Check the answer key
-You see a table: question number, answer, number of choices, pages, tags and explanation. Everything is editable.
+You see a table: question number, answer, number of choices, pages and explanation. Everything is editable.
 Rows with a problem are red; **Jump to next warning** takes you through them. Click a row to see that question.
 When it looks right, click **Key looks right: save** (you land on the exam's page, with **New attempt**). You can come back any time (**Edit** in the Library); fixing
 the key also re-grades your old attempts.
 
 ### 5. Take a block
-**New attempt** → choose the questions (all, a range, random N, missed only, marked only, or by tag), the order and
+**New attempt** → choose the questions (all, a range, random N, missed only or marked only), the order and
 the mode:
 - **Exam**: timed (90 s per question by default), full screen, answers locked until the end.
 - **Tutor**: submit each answer to see the correct answer and explanation right away.
@@ -56,11 +64,15 @@ Presets: 40 questions / 60 minutes, or shelf-style (110 questions in 4 blocks, 2
 
 In the block:
 - **Answer**: click the choice on the page (or the bubble beside it), or press its letter.
-- **Highlight**: drag across text. Click a highlight to remove it.
+- **Highlight**: drag across text (as little as one character) or double-click a word. Click a highlight to remove
+  it. Answer choices are never highlighted: strike them out instead.
 - **Mark**: the checkbox above the question, or **M**.
 - **Pictures** (photos, ECGs, x-rays): click the picture or its **Zoom** button to pop it out; use − / + (or the − and + keys) to zoom, drag the title bar to move it.
 - **Lab Values** (L), **Calculator** (C), **Notes**: top right. Esc closes them.
 - **← / →** or **P / N**: previous / next. Letters pick answer choices first (on a question with choices A–E, **C** picks choice C); to use a shortcut whose letter is also a choice, hold **Alt/Option** (Alt+C opens the Calculator).
+- **Clock** (bottom): click it to switch Timed / Tutor / Untimed or add time. In Tutor, **Proceed to Next Item**
+  appears under the choices after you submit.
+- **Lab Values** opens full height on the right; the search highlights matches, and **SI** adds a column.
 - **Pause** hides the question and stops the clock. If your computer sleeps or you close the window, the clock
   stops at that moment and **Resume block** brings you back exactly where you were.
 - **Review** (bottom right) shows a grid of answered / unanswered / marked questions with **Review Marked** and
@@ -71,19 +83,19 @@ In the block:
   Strike-outs, highlights and notes are kept and shown again when you review the block.
 
 ### 6. Review
-After a block you get a score report (percent, time, answer changes, accuracy by confidence, time per question,
-score by tag). **Review** opens the same test screen read-only, with your highlights, strike-outs and notes as you
+After a block you get a score report with two tabs: **Test Results** (score, every question with your answer,
+the correct one and time; filter by correct / incorrect / omitted / marked) and **Test Analysis** (score ring, answer
+changes, time per question). **Review** opens the same test screen read-only, with your highlights, strike-outs and notes as you
 left them, your answer in red/green, and the explanation on the right. Filter by incorrect, marked, changed
-answers, guesses or slowest 10. For each miss, click a **reason** and write a **review note**.
+answers or slowest 10. You can highlight inside explanations too; those highlights are kept. For each miss, click a **reason** and write a **review note**.
 Every attempt stays in the exam's history with a score trend chart. An unfinished block you no longer want can be
 discarded from the Library.
 
 ### 7. Missed Questions
-**Missed Questions** collects every question you got wrong, guessed or marked, across all exams. Filter it, click a
+**Missed Questions** collects every question you got wrong or marked, across all exams. Filter it, click a
 row to see the question with your original markings, or **Redo** it blind. Redos follow a spaced schedule
 (3, 7, 21, 60 days); two correct redos on different days mark it **Mastered**. When questions are due, the Library
 shows a **Due for review** card. **Quiz me** builds a block from whatever the list is filtered to.
-**Weak Areas** shows accuracy by tag and by reason for miss, worst first.
 
 ### 8. Back up
 - With a data folder: nothing to do (and put the folder in a cloud drive for an off-computer copy).
@@ -91,8 +103,15 @@ shows a **Due for review** card. **Quiz me** builds a block from whatever the li
   **Settings → Restore from a backup file**. Restoring merges and never deletes anything; it also brings back exams
   you deleted after making that backup.
 
+### Fix a question's area or choices
+Open the exam → **Questions, pictures and choices**. Pick a question on the left. Green is what the question shows,
+blue are the clickable choices. Untick **Question area locked** and drag around everything the question should show
+(for example a picture above it); this changes only that page, or click **Use this area on every page**. Untick
+**Answer choices locked** and drag a box around each choice in order (A, B, C…). Every change saves at once;
+**Undo** / **Redo** (⌘Z / Ctrl+Z) take it back.
+
 ### 9. Move to a new computer
-- With a data folder in a cloud drive: open Block Sim on the new computer, **Choose a data folder**, pick the same
+- With a data folder in a cloud drive: open Test Simulator on the new computer, **Choose a data folder**, pick the same
   folder. Everything appears.
 - Otherwise: **Back up now** on the old computer, copy the file over, **Settings → Restore** on the new one.
 
@@ -104,6 +123,8 @@ Problems? See **Help** in the app, or use the **Report a bug** link at the botto
 ## For the maintainer
 
 Stack: Vite + React + TypeScript + Tailwind, Dexie (IndexedDB), pdf.js and Tesseract.js bundled locally.
+The app was renamed from Block Sim to Test Simulator; the URL path (`/block-sim/`), the database names and the
+backup format are unchanged on purpose so installed apps, links and everyone's history keep working.
 Hosted on GitHub Pages; `main` → `/block-sim/` (stable), `beta` → `/block-sim/beta/` (labeled BETA, separate
 storage, separate service worker). Rules for working on the code are in `CLAUDE.md`; design choices in `DECISIONS.md`.
 

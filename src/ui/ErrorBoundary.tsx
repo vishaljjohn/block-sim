@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; name: string
             onClick={async () => {
               this.setState({ busy: true, msg: '' });
               try {
-                downloadBlob(await exportBackup(), `block-sim-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+                downloadBlob(await exportBackup(), `test-simulator-backup-${new Date().toISOString().slice(0, 10)}.zip`);
                 this.setState({ msg: 'Backup downloaded.' });
               } catch (e) {
                 this.setState({ msg: 'Export failed: ' + String(e) });

@@ -8,7 +8,7 @@ const QA: { q: string; a: ReactNode }[] = [
     q: 'My history is gone. What happened?',
     a: (
       <>
-        <p>Block Sim keeps everything in this browser on this computer (and in your data folder, if you chose one). History disappears from the browser when its site data is cleared, in a private/incognito window, in a different browser or browser profile, or if the browser removes storage when the disk is nearly full.</p>
+        <p>Test Simulator keeps everything in this browser on this computer (and in your data folder, if you chose one). History disappears from the browser when its site data is cleared, in a private/incognito window, in a different browser or browser profile, or if the browser removes storage when the disk is nearly full.</p>
         <p>To get it back: if you had a data folder, open <b>Settings → Choose a data folder</b> and pick the same folder. Otherwise use <b>Settings → Restore from a backup file</b> with your most recent backup. Settings also keeps the last 5 automatic snapshots.</p>
         <p>To prevent it: choose a data folder (Chrome/Edge), install the app, and back up regularly.</p>
       </>
@@ -18,7 +18,7 @@ const QA: { q: string; a: ReactNode }[] = [
     q: 'How do I move to a new computer?',
     a: (
       <>
-        <p><b>With a data folder in iCloud Drive, OneDrive, Dropbox or Google Drive:</b> open Block Sim on the new computer, choose <b>Choose a data folder</b>, and pick the same folder. Everything appears.</p>
+        <p><b>With a data folder in iCloud Drive, OneDrive, Dropbox or Google Drive:</b> open Test Simulator on the new computer, choose <b>Choose a data folder</b>, and pick the same folder. Everything appears.</p>
         <p><b>Without one:</b> on the old computer click <b>Back up now</b>, copy the file to the new computer (cloud drive, USB stick, email), then <b>Settings → Restore from a backup file</b>.</p>
       </>
     ),
@@ -32,7 +32,7 @@ const QA: { q: string; a: ReactNode }[] = [
   {
     q: 'I can’t click the choices on the page.',
     a: (
-      <p>Block Sim only makes choices clickable when it can read them clearly; otherwise it shows the A–E bubble panel beside the question, which always works (you can also press the letter). If clickable choices are in the wrong place, choose <b>Settings (gear) → Choices look wrong? Use bubbles</b> in the test, or fix them under <b>Layout, crop and choices → Fix choices</b>. Scanned PDFs are read in the background, so choices can become clickable a minute after importing.</p>
+      <p>Test Simulator only makes choices clickable when it can read them clearly; otherwise it shows the A–E bubble panel beside the question, which always works (you can also press the letter). If clickable choices are in the wrong place, choose <b>Settings (gear) → Choices look wrong? Use bubbles</b> in the test, or fix them under <b>Questions, pictures and choices</b>: untick <b>Answer choices locked</b> and drag a box around each choice. Scanned PDFs are read in the background, so choices can become clickable a minute after importing.</p>
     ),
   },
   {
@@ -50,8 +50,26 @@ const QA: { q: string; a: ReactNode }[] = [
   {
     q: 'The question looks cut off or shows a toolbar.',
     a: (
-      <p>Each page is trimmed automatically. If the trim is wrong, open the exam, choose <b>Layout, crop and choices → Crop for all pages</b> and drag a box around the question area, or pick “No crop”. For one question, adjust its area under <b>Question areas</b>.</p>
+      <p>Each page is trimmed automatically. If a question is cut off (for example a picture above it is missing), open the exam and choose <b>Questions, pictures and choices</b>. Pick the question, untick <b>Question area locked</b> and drag a box around everything it should show. That changes only that page; <b>Use this area on every page</b> applies it everywhere. Every change can be undone with <b>Undo</b> (⌘Z / Ctrl+Z).</p>
     ),
+  },
+  {
+    q: 'How do I import a whole folder and sort exams by subject?',
+    a: (
+      <>
+        <p>Make one folder with a subfolder per subject (<code>Surgery</code>, <code>OBGYN</code>, <code>Internal Medicine</code>…). Put each exam’s question PDF and answer PDF in its subject folder, named so they match by number, for example <code>5 Q.pdf</code> and <code>5A.pdf</code>.</p>
+        <p>Then choose <b>Import → A whole folder of exams</b> and pick the top folder. Each subfolder becomes a folder in the Library. In Chrome or Edge, tick <b>Keep my Test Simulator data in this folder</b>: your attempts, highlights and notes are saved in a <b>Test Simulator Data</b> subfolder right next to your PDFs, and the PDFs are read from where they are instead of being copied.</p>
+        <p>To move an exam to another folder later, use the ⋯ menu on its card in the Library.</p>
+      </>
+    ),
+  },
+  {
+    q: 'Timed, tutor and untimed modes',
+    a: <p>Click the clock at the bottom of the test screen to switch between <b>Timed</b>, <b>Tutor</b> (shows the answer and explanation after each question, with <b>Proceed to Next Item</b>) and <b>Untimed</b>, or to add 5–30 minutes.</p>,
+  },
+  {
+    q: 'Highlighting and striking out',
+    a: <p>Drag over words in the question (or double-click one word) to highlight. In the test, open <b>Settings</b> (gear) to pick a colour and choose <b>Quick</b> (highlights as soon as you let go) or <b>Manual</b> (asks for a colour first). Answer choices cannot be highlighted: use the <b>ab</b> button to the right of a choice, or right-click it, to strike it out. Highlights and strike-outs are kept and shown again in review, and you can highlight inside explanations too.</p>,
   },
   {
     q: 'What does the timer do if my laptop goes to sleep?',
@@ -63,7 +81,7 @@ const QA: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Is my data private?',
-    a: <p>Yes. Block Sim is a static web page: there is no server, no account and no analytics. PDFs and history never leave your computer unless you copy a backup file somewhere yourself. Only import materials you have the right to use.</p>,
+    a: <p>Yes. Test Simulator is a static web page: there is no server, no account and no analytics. PDFs and history never leave your computer unless you copy a backup file somewhere yourself. Only import materials you have the right to use.</p>,
   },
 ];
 

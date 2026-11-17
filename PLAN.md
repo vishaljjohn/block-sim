@@ -1,4 +1,4 @@
-# Block Sim: plan and status
+# Test Simulator: plan and status
 
 ## STATUS (2026-11-16, evening)
 

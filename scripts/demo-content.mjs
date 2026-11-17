@@ -1,4 +1,4 @@
-// Five ORIGINAL, made-up practice questions written for the Block Sim demo. Not taken from any exam.
+// Five ORIGINAL, made-up practice questions written for the Test Simulator demo. Not taken from any exam.
 export const demoQuestions = [
   {
     stem: 'A 34-year-old marathon runner comes to the clinic because of 3 days of fatigue after a race held in very hot weather. During the race he drank only plain water, about 6 liters in total. He is alert but reports a mild headache and nausea. Pulse is 88/min and blood pressure is 118/74 mm Hg. Serum sodium is 127 mEq/L. Which of the following best explains this laboratory finding?',
