@@ -47,3 +47,13 @@ test('questions pasted as text', async ({ page }) => {
   await page.getByTestId('import-go').click();
   await expect(page.getByTestId('key-check')).toContainText('2 have an answer');
 });
+
+test('text without numbered questions explains what to do', async ({ page }) => {
+  await freshStart(page);
+  await page.goto('./#/import');
+  await page.getByTestId('qsrc-paste').click();
+  await page.getByTestId('question-text').fill('Some notes with no questions in them.');
+  await page.getByTestId('make-from-text').click();
+  await expect(page.getByTestId('import-error')).toContainText('no numbered questions');
+  await expect(page.getByTestId('pdf-info')).toHaveCount(0);
+});

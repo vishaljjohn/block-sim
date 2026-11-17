@@ -40,8 +40,9 @@ export function ImportPage() {
     setMaking('Making the exam…');
     try {
       if (!blocks.some((b) => b.kind === 'p')) throw new Error('No text was found.');
-      const bytes = await blocksToPdf(blocks, title);
       const n = countQuestions(blocks);
+      if (!n) throw new Error('no numbered questions were found. Start each question with its number, like “1.” or “Question 1:”, and number them in order.');
+      const bytes = await blocksToPdf(blocks, title);
       if (countInlineAnswers(blocks) >= Math.max(1, Math.floor(n / 2))) setSource('inline');
       else if (source === 'pdf' || source === 'same') setSource('paste');
       setLayout('auto');
@@ -231,7 +232,7 @@ export function ImportPage() {
           <H2>2. How are the questions laid out?</H2>
           <div className="space-y-2 text-sm">
             <label className="choice flex-wrap items-center">
-              <input type="radio" name="layout" checked={layout === 'auto'} onChange={() => setLayout('auto')} data-testid="layout-auto" /> <b>Work it out for me</b> (recommended). Test Simulator reads the question numbers on the pages. Falls back to one page per question when it cannot.
+              <input type="radio" name="layout" checked={layout === 'auto'} onChange={() => setLayout('auto')} data-testid="layout-auto" /> <span><b>Work it out for me</b> (recommended). Test Simulator reads the question numbers on the pages. Falls back to one page per question when it cannot.</span>
             </label>
             <label className="choice flex-wrap items-center">
               <input type="radio" name="layout" checked={layout === 'fixed'} onChange={() => setLayout('fixed')} data-testid="layout-fixed" /> <span><b>Fixed</b>: exactly</span>

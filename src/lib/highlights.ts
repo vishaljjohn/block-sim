@@ -53,15 +53,29 @@ export function wordsBetween(words: Word[], a: number, b: number): number[] {
  * Words of the answer choices inside an area: from the first line labelled A) (followed by a B) line) down to the
  * end of the area, in the same column. Answer choices are struck out, never highlighted.
  */
+const choiceCache = new WeakMap<Word[], Map<string, Set<number>>>();
 export function choiceWords(words: Word[], area: Rect | null): Set<number> {
+  const key = area ? `${area.x.toFixed(4)},${area.y.toFixed(4)},${area.w.toFixed(4)},${area.h.toFixed(4)}` : 'all';
+  let m = choiceCache.get(words);
+  if (!m) choiceCache.set(words, (m = new Map()));
+  const hit = m.get(key);
+  if (hit) return hit;
   const out = new Set<number>();
+  m.set(key, out);
   const inArea = (l: { x: number; y: number; w: number; h: number }) => !area || (l.y + l.h / 2 >= area.y && l.y + l.h / 2 <= area.y + area.h && l.x + l.w / 2 >= area.x && l.x + l.w / 2 <= area.x + area.w);
   const lines = buildLines(words).filter(inArea);
   const labelled = lines.map((l) => matchChoiceLabel(l.text)?.letter ?? null);
   const a = labelled.findIndex((L, i) => L === 'A' && labelled.slice(i + 1).some((M) => M === 'B'));
   if (a < 0) return out;
   const start = lines[a];
-  for (const l of lines) if (l.column === start.column && l.y >= start.y - start.h * 0.3) for (const i of l.idx) out.add(i);
+  // in every column, from its first labelled line at or below choice A downwards (choices can run in two columns)
+  const cols = new Set(lines.map((l) => l.column));
+  for (const c of cols) {
+    const inCol = lines.filter((l) => l.column === c && l.y >= start.y - start.h * 0.3).sort((x, y) => x.y - y.y);
+    const first = inCol.findIndex((l) => !!matchChoiceLabel(l.text));
+    if (first < 0) continue;
+    for (const l of inCol.slice(first)) for (const i of l.idx) out.add(i);
+  }
   return out;
 }
 

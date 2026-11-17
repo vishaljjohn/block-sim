@@ -93,13 +93,24 @@ export async function docxToBlocks(buf: ArrayBuffer): Promise<Block[]> {
     }
   };
   const list = async (ol: Element, depth: number): Promise<void> => {
-    for (const li of [...ol.children]) {
-      const own = [...li.childNodes].filter((n) => !(n instanceof Element && /^(ol|ul)$/i.test(n.tagName)));
-      const t = own.map((n) => n.textContent ?? '').join(' ').replace(/\s+/g, ' ').trim();
+    const own = (li: Element) =>
+      [...li.childNodes]
+        .filter((n) => !(n instanceof Element && /^(ol|ul)$/i.test(n.tagName)))
+        .map((n) => n.textContent ?? '')
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const items = [...ol.children];
+    const lens = items.map((li) => own(li).length);
+    // the whole list is either questions or the answer choices of the question above it: a nested list, or a list
+    // right after a question, holds choices unless its items are as long as question stems
+    const avg = lens.reduce((a, b) => a + b, 0) / Math.max(1, lens.length);
+    const asQuestions = depth === 0 && (q === 0 || avg > 160);
+    for (const li of items) {
+      const t = own(li);
       if (t) {
         if (QSTART.test(t) || LABEL.test(t)) pushText(t, depth);
-        // a long item (or the first one) is the next question; short items after a question are its choices
-        else if (q === 0 || (depth === 0 && t.length > 80)) pushText(`${q + 1}. ${t}`, 0);
+        else if (asQuestions) pushText(`${q + 1}. ${t}`, 0);
         else pushText(`${String.fromCharCode(65 + Math.min(letter, 25))}) ${t}`, 1);
       }
       await images(li);
@@ -135,7 +146,19 @@ const LINE = 16;
 function wrap(font: PDFFont, text: string, size: number, max: number): string[] {
   const out: string[] = [];
   let line = '';
-  for (const word of text.split(/\s+/)) {
+  // a word wider than the line (a long link, a run of dashes) is split so it never runs off the page
+  const words: string[] = [];
+  for (const w of text.split(/\s+/)) {
+    let rest = w;
+    while (rest.length > 1 && font.widthOfTextAtSize(rest, size) > max) {
+      let n = rest.length - 1;
+      while (n > 1 && font.widthOfTextAtSize(rest.slice(0, n), size) > max) n--;
+      words.push(rest.slice(0, n));
+      rest = rest.slice(n);
+    }
+    words.push(rest);
+  }
+  for (const word of words) {
     const t = line ? line + ' ' + word : word;
     if (line && font.widthOfTextAtSize(t, size) > max) {
       out.push(line);
@@ -147,9 +170,10 @@ function wrap(font: PDFFont, text: string, size: number, max: number): string[] 
 }
 
 /** Keep only characters the font can draw. */
+const charsets = new WeakMap<PDFFont, Set<number>>();
 function drawable(font: PDFFont, text: string): string {
-  const set = font.getCharacterSet();
-  const ok = new Set(set);
+  let ok = charsets.get(font);
+  if (!ok) charsets.set(font, (ok = new Set(font.getCharacterSet())));
   const map: Record<string, string> = { '≤': '<=', '≥': '>=', '→': '->', '←': '<-', '↑': '^', '↓': 'v', '…': '...' };
   let out = '';
   for (const ch of text) out += ok.has(ch.codePointAt(0)!) ? ch : (map[ch] ?? (/\s/.test(ch) ? ' ' : '?'));
@@ -172,6 +196,7 @@ export async function blocksToPdf(blocks: Block[], title: string): Promise<Uint8
     y = PAGE_H - M;
   };
   const used = () => page && y < PAGE_H - M - 1;
+  let qn = 0;
   // where each question's page starts: at its number, or at the pictures right above it
   const breakAt = new Set<number>();
   {
@@ -194,7 +219,14 @@ export async function blocksToPdf(blocks: Block[], title: string): Promise<Uint8
     if (b.kind === 'p') {
       if (!page) newPage();
       const indent = (b.indent ?? 0) * 18;
-      const lines = wrap(font, drawable(font, b.text), SIZE, PAGE_W - 2 * M - indent);
+      // the forms the app reads best: "12. " for a question, "C) " for a choice
+      let t = b.text;
+      const qm = QSTART.exec(t);
+      if (qm && Number(qm[1]) === qn + 1) {
+        qn++;
+        t = t.replace(/^\s*(?:q(?:uestion)?\.?\s*)?\d{1,3}\s*[.):]\s*/i, `${qn}. `);
+      } else if (LABEL.test(t)) t = t.replace(/^\s*\(?([A-Za-z])\s*[.):]\s*/, (_, L: string) => `${L.toUpperCase()}) `);
+      const lines = wrap(font, drawable(font, t), SIZE, PAGE_W - 2 * M - indent);
       for (const l of lines) {
         if (y - LINE < M) newPage();
         page!.drawText(l, { x: M + indent, y: y - SIZE, size: SIZE, font });

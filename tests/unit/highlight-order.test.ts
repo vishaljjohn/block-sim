@@ -24,6 +24,13 @@ describe('highlights follow the text', () => {
     const tall = [w('a', 0.1, 0.1), w('b', 0.18, 0.1), w('c', 0.26, 0.1, 0.06, 0.03)];
     expect(Math.max(...rectsForRange(tall, 0, 2).map((r) => r.h))).toBeLessThan(0.03);
   });
+  it('choices in two columns (A–E left, F–J right) are all protected', () => {
+    const page = [w('Pick', 0.1, 0.1), w('one', 0.2, 0.1), w('of', 0.3, 0.1), w('these', 0.4, 0.1), w('now', 0.5, 0.1), w('please', 0.6, 0.1),
+      w('A)', 0.1, 0.2, 0.02), w('One', 0.13, 0.2), w('B)', 0.1, 0.23, 0.02), w('Two', 0.13, 0.23), w('F)', 0.6, 0.2, 0.02), w('Six', 0.63, 0.2), w('G)', 0.6, 0.23, 0.02), w('Seven', 0.63, 0.23)];
+    const got = choiceWords(page, null);
+    for (const i of [6, 7, 8, 9]) expect(got.has(i)).toBe(true);
+    for (const i of [0, 5]) expect(got.has(i)).toBe(false);
+  });
   it('answer choices are found from the text even without clickable choices', () => {
     const page = [w('Which', 0.1, 0.1), w('is', 0.2, 0.1), w('right?', 0.25, 0.1), w('A)', 0.1, 0.15, 0.02), w('One', 0.13, 0.15), w('B)', 0.1, 0.18, 0.02), w('Two', 0.13, 0.18)];
     expect([...choiceWords(page, null)].sort()).toEqual([3, 4, 5, 6]);

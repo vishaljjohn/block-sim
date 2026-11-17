@@ -145,7 +145,7 @@ export function KeyCheck({ examId }: { examId: string }) {
               {exam.questions.map((x, i) => {
                 const w = warnByN.get(x.number);
                 return (
-                  <tr key={x.id} ref={(el) => void (el ? rows.current.set(i, el) : rows.current.delete(i))} onFocus={() => setFocus(i)} onClick={() => setFocus(i)} style={{ background: i === focus ? '#e6edf5' : w ? '#fff4f4' : undefined }} data-testid={`key-row-${x.number}`} data-warning={w?.kind ?? ''}>
+                  <tr key={x.id} ref={(el) => void (el ? rows.current.set(i, el) : rows.current.delete(i))} onFocus={() => setFocus(i)} onClick={() => setFocus(i)} style={{ background: i === focus ? 'var(--brand-soft, #e6edf5)' : w ? 'rgb(239 68 68 / 0.08)' : undefined }} data-testid={`key-row-${x.number}`} data-warning={w?.kind ?? ''}>
                     <td className="td font-bold">
                       {x.number}
                       {w && <div className="text-[10px] font-normal leading-tight text-red-700" title={w.text}>⚠ {w.kind === 'missing' ? 'missing' : w.kind === 'beyond' ? 'beyond choices' : 'check'}</div>}

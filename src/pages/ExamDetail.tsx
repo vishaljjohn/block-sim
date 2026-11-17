@@ -86,7 +86,7 @@ export function ExamDetail({ examId }: { examId: string }) {
               return (
                 <tr key={a.id}>
                   <td className="td">{fmtDateTime(a.completedAt ?? a.createdAt)}</td>
-                  <td className="td capitalize">{a.mode}{a.status === 'active' ? ' (in progress)' : ''}</td>
+                  <td className="td">{a.mode === 'tutor' ? 'Tutor' : 'Test'} · {a.blocks.some((bl) => bl.limitMs != null) ? 'timed' : 'untimed'}{a.status === 'active' ? ' (in progress)' : ''}</td>
                   <td className="td">{a.items.length}</td>
                   <td className="td">
                     {a.status === 'completed' ? (

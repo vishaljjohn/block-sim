@@ -172,7 +172,7 @@ export function LayoutEditor({ examId }: { examId: string }) {
           <div className="mb-1 text-xs font-bold">Questions ({exam.questions.length})</div>
           <div className="max-h-[75vh] overflow-y-auto rounded border border-gray-300">
             {exam.questions.map((x, i) => (
-              <button key={x.id} className="flex w-full justify-between px-2 py-1 text-left text-sm" style={{ background: i === sel ? '#1c4973' : i % 2 ? '#f3f4f6' : '#fff', color: i === sel ? '#fff' : '#000' }} onClick={() => choose(i)} data-testid={`layout-q-${x.number}`}>
+              <button key={x.id} className="flex w-full justify-between px-2 py-1 text-left text-sm" style={{ background: i === sel ? 'var(--brand)' : i % 2 ? 'var(--surface-2)' : 'var(--surface)', color: i === sel ? '#fff' : 'var(--ink)' }} onClick={() => choose(i)} data-testid={`layout-q-${x.number}`}>
                 <span>Q{x.number}</span>
                 <span className="text-[11px] opacity-80">{status(x)}</span>
               </button>

@@ -50,7 +50,7 @@ export function Report({ attemptId }: { attemptId: string }) {
       const kind: Show = isBlank(it) ? 'omitted' : isCorrect(it) ? 'correct' : 'incorrect';
       return show.has(kind) || (show.has('marked') && it.marked);
     });
-  const modeChips = [a.mode === 'tutor' ? 'Tutor' : 'Untutored', a.mode === 'exam' ? 'Timed' : 'Untimed'];
+  const modeChips = [a.mode === 'tutor' ? 'Tutor' : 'Untutored', a.blocks.some((b) => b.limitMs != null) ? 'Timed' : 'Untimed'];
 
   return (
     <div data-testid="report">
@@ -72,7 +72,7 @@ export function Report({ attemptId }: { attemptId: string }) {
 
         <div className="mt-4 flex gap-6 border-b border-gray-200" role="tablist">
           {(['results', 'analysis'] as const).map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} className="-mb-px border-b-2 pb-2 text-[15px]" style={{ borderColor: tab === t ? '#1c4973' : 'transparent', color: tab === t ? '#111' : '#6b7280' }} onClick={() => setTab(t)} data-testid={`tab-${t}`}>
+            <button key={t} role="tab" aria-selected={tab === t} className="-mb-px border-b-2 pb-2 text-[15px]" style={{ borderColor: tab === t ? 'var(--brand, #1c4973)' : 'transparent', color: tab === t ? 'var(--ink, #111)' : 'var(--ink-3, #6b7280)', fontWeight: tab === t ? 600 : 400 }} onClick={() => setTab(t)} data-testid={`tab-${t}`}>
               {t === 'results' ? 'Test Results' : 'Test Analysis'}
             </button>
           ))}

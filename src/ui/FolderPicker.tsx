@@ -11,10 +11,11 @@ export const SUGGESTED_FOLDERS = ['Internal Medicine', 'Surgery', 'OBGYN', 'Pedi
  * any name.
  */
 export function FolderPicker({ value, onChange, testId, className = '' }: { value: string; onChange: (v: string) => void; testId?: string; className?: string }) {
-  const used = useLive(() => db.exams.toArray().then((es) => [...new Set(es.map((e) => e.subject?.trim()).filter((s): s is string => !!s))]), []) ?? [];
-  const options = [...new Set([...used, ...SUGGESTED_FOLDERS])].sort((a, b) => a.localeCompare(b));
-  const known = !value || options.includes(value);
-  const [typing, setTyping] = useState(!known);
+  const loaded = useLive(() => db.exams.toArray().then((es) => [...new Set(es.map((e) => e.subject?.trim()).filter((s): s is string => !!s))]), []);
+  const options = [...new Set([...(loaded ?? []), ...SUGGESTED_FOLDERS])].sort((a, b) => a.localeCompare(b));
+  // typing a new name: chosen from the list, or a name that is in no folder yet (known once the list has loaded)
+  const [chose, setTyping] = useState(false);
+  const typing = chose || (!!loaded && !!value && !options.includes(value));
   return (
     <span className={'inline-flex flex-wrap items-center gap-2 ' + className}>
       <select

@@ -212,7 +212,9 @@ export function QuestionView(p: QuestionViewProps) {
       const pt = a.toPage(e.clientX, e.clientY);
       const words = texts.get(seg.page)?.words;
       const ch = choiceAt(seg.page, pt.x, pt.y);
-      const w = words ? wordAt(words, pt.x, pt.y) : -1;
+      let w = words ? wordAt(words, pt.x, pt.y) : -1;
+      // a drag that starts in the margin next to a line starts at that line's nearest word
+      if (w < 0 && words && !ch) w = wordAt(words, pt.x, pt.y, 0.25);
       const c = w >= 0 && words ? charAt(words[w], pt.x) : 0;
       const d: Drag = { seg: segIndex, page: seg.page, x0: pt.x, y0: pt.y, cx: e.clientX, cy: e.clientY, x1: pt.x, y1: pt.y, moved: false, w0: w, w1: w, c0: c, c1: c, choice: ch?.letter ?? null, longDone: false };
       setD(d);

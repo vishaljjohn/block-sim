@@ -157,14 +157,14 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
 
       <H2>Length and timing</H2>
       <div className="space-y-2 text-sm">
-        <label className="choice flex-wrap items-center"><input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" /> <b>Custom</b>:
+        <label className="choice flex-wrap items-center"><input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" /> <span><b>Custom</b>:</span>
           <input className="field mx-1 w-16" type="number" min={10} max={3600} value={secPerQ} disabled={!timed} onChange={(e) => { setSecPerQ(Math.max(5, parseInt(e.target.value, 10) || DEFAULT_SEC_PER_Q)); setPreset('custom'); }} data-testid="sec-per-q" aria-label="Seconds per question" />
           seconds per question, in
           <input className="field mx-1 w-14" type="number" min={1} max={20} value={blocks} onChange={(e) => { setBlocks(Math.max(1, parseInt(e.target.value, 10) || 1)); setPreset('custom'); }} data-testid="block-count" aria-label="Number of blocks" />
           block(s)
         </label>
-        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'standard'} onChange={() => setPreset('standard')} data-testid="preset-standard" /> <b>40 questions / 60 minutes</b> (one block)</label>
-        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'shelf'} onChange={() => setPreset('shelf')} data-testid="preset-shelf" /> <b>Shelf-style</b>: 110 questions in 4 blocks, 2 h 45 min total, with a break screen between blocks</label>
+        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'standard'} onChange={() => setPreset('standard')} data-testid="preset-standard" /> <span><b>40 questions / 60 minutes</b> (one block)</span></label>
+        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'shelf'} onChange={() => setPreset('shelf')} data-testid="preset-shelf" /> <span><b>Shelf-style</b>: 110 questions in 4 blocks, 2 h 45 min total, with a break screen between blocks</span></label>
         {nBlocks > 1 && (
           <label className="block pl-5">
             Break timer (optional):

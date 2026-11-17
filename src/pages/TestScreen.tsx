@@ -60,7 +60,7 @@ function cloneAttempt(a: Attempt): Attempt {
 
 function ToolButton({ label, onClick, children, disabled, testId, active }: { label: string; onClick: () => void; children: React.ReactNode; disabled?: boolean; testId?: string; active?: boolean }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} data-testid={testId} aria-pressed={active} className="flex min-w-[58px] flex-col items-center px-1.5 text-[12px] leading-tight text-white disabled:opacity-40" title={label}>
+    <button type="button" onClick={onClick} disabled={disabled} data-testid={testId} aria-pressed={active} className="flex min-w-[48px] flex-col items-center px-1 text-[11px] leading-tight text-white disabled:opacity-40 lg:min-w-[58px] lg:px-1.5 lg:text-[12px]" title={label}>
       {children}
       <span className="mt-0.5 whitespace-nowrap">{label}</span>
     </button>
@@ -548,7 +548,10 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   };
 
   const statusMark = (it: AttemptItem) => {
-    if (review || (it.locked && a.mode === 'tutor')) return isCorrect(it) ? <Check size={11} /> : <Cross size={11} />;
+    if (review || (it.locked && a.mode === 'tutor')) {
+      if (!it.answer) return <span aria-hidden="true" className="font-bold text-gray-500" title="omitted">–</span>;
+      return isCorrect(it) ? <Check size={11} /> : <Cross size={11} />;
+    }
     return it.answer ? null : <span aria-hidden="true">•</span>;
   };
 
@@ -587,7 +590,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
             <div className="border-t border-gray-300 px-1 py-1 text-[10px] leading-tight text-gray-700" data-testid="status-legend">
               {review ? (
                 <>
-                  <Check size={9} /> correct · <Cross size={9} /> wrong
+                  <Check size={9} /> correct · <Cross size={9} /> wrong · <b className="text-gray-500">–</b> omitted
                 </>
               ) : (
                 <>• unanswered</>
@@ -610,12 +613,12 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 {a.blocks.length > 1 && <div>Block: {a.currentBlock + 1} of {a.blocks.length}</div>}
                 {a.blocks.length === 1 && <div className="text-[11px] opacity-90">{review ? 'Review' : a.mode === 'tutor' ? 'Tutor mode' : 'Test mode'}</div>}
               </button>
-              <div className="status-font hidden min-w-0 truncate text-[14px] md:block" title={a.name}>
+              <div className="status-font hidden min-w-0 truncate text-[14px] lg:block" title={a.name}>
                 {a.name}
                 {IS_BETA && <span className="ml-2 bg-yellow-300 px-1 text-xs font-bold text-black">BETA</span>}
               </div>
             </div>
-            <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-3">
+            <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 lg:gap-3">
               <ToolButton label="Previous" onClick={() => step(-1)} disabled={pos <= 0} testId="prev">
                 <IconPrev />
               </ToolButton>
