@@ -152,8 +152,21 @@ test('lab values, calculator, notes and keyboard', async ({ page }) => {
   await startBlock(page, { mode: 'untimed' });
   await page.keyboard.press('Alt+L');
   await expect(page.getByTestId('lab-panel')).toBeVisible();
-  await page.getByTestId('lab-search').fill('sodium');
-  await expect(page.getByTestId('lab-rows')).toContainText('136–146');
+  // the panel fills the height between the bars
+  const lab = (await page.getByTestId('lab-panel').boundingBox())!;
+  expect(lab.height).toBeGreaterThan((page.viewportSize()?.height ?? 800) - 140);
+  // search highlights matches without hiding the other rows; tabs with matches light up
+  const rows = await page.locator('[data-testid="lab-rows"] tbody tr').count();
+  await page.getByTestId('lab-search').fill('creatin');
+  await expect(page.locator('[data-testid="lab-rows"] mark').first()).toBeVisible();
+  expect(await page.locator('[data-testid="lab-rows"] tbody tr').count()).toBe(rows);
+  await expect(page.getByTestId('lab-tab-serum')).toHaveAttribute('data-hit', '1');
+  await expect(page.getByTestId('lab-tab-csf')).toHaveAttribute('data-hit', '0');
+  // SI adds a column; the reference range column stays
+  await page.getByTestId('lab-si').check();
+  await expect(page.getByTestId('lab-si-col')).toBeVisible();
+  await expect(page.getByTestId('lab-rows')).toContainText('136–146 mEq/L');
+  await expect(page.getByTestId('lab-rows')).toContainText('136–146 mmol/L');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('lab-panel')).toHaveCount(0);
   await page.getByTestId('btn-calc').click();

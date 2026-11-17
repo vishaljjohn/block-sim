@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { answers, confirmKey, freshStart, importExam, startBlock } from './helpers';
+import { confirmKey, freshStart, importExam, startBlock } from './helpers';
 
 test('double-click highlights a word; part of a word can be highlighted; answer choices cannot', async ({ page }, info) => {
   test.skip(info.project.name === 'ipad', 'mouse');

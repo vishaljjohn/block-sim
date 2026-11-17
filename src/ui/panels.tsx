@@ -52,70 +52,141 @@ export function FloatingPanel({ title, children, onClose, initial, resizable = t
   );
 }
 
-export function LabValues({ onClose }: { onClose: () => void }) {
+/** Highlight every occurrence of `q` inside `text`. */
+function Marked({ text, q }: { text: string; q: string }) {
+  if (!q || !text) return <>{text}</>;
+  const parts: React.ReactNode[] = [];
+  const low = text.toLowerCase();
+  let i = 0;
+  let k = 0;
+  for (;;) {
+    const j = low.indexOf(q, i);
+    if (j < 0) break;
+    if (j > i) parts.push(text.slice(i, j));
+    parts.push(
+      <mark key={k++} style={{ background: '#fde047', color: 'inherit', padding: 0 }}>
+        {text.slice(j, j + q.length)}
+      </mark>,
+    );
+    i = j + q.length;
+  }
+  parts.push(text.slice(i));
+  return <>{parts}</>;
+}
+
+/**
+ * Lab values, docked on the right like the real exam: full height between the bars, resizable by its left edge.
+ * Typing in Search highlights matches (and the tabs that contain them) instead of hiding rows. The SI checkbox adds
+ * an SI column next to the reference ranges.
+ */
+export function LabValues({ onClose, top = 62, bottom = 58 }: { onClose: () => void; top?: number; bottom?: number }) {
   const [tab, setTab] = useState(LAB_TABS[0].id);
   const [q, setQ] = useState('');
   const [si, setSi] = useState(false);
+  const [width, setWidth] = useState(() => Math.max(380, Math.min(680, Math.round(window.innerWidth * 0.42))));
+  const drag = useRef<{ x: number; w: number } | null>(null);
+  const body = useRef<HTMLDivElement | null>(null);
   const query = q.trim().toLowerCase();
-  const shown = useMemo(() => {
-    if (!query) return LAB_TABS.filter((t) => t.id === tab);
-    // searching looks through every tab; a nameless continuation row matches through its parent
-    return LAB_TABS.map((t) => {
-      let parent = '';
-      const rows = t.rows.filter((r) => {
-        if (r.kind === 'group') return false;
-        if (r.name) parent = r.name;
-        return (r.name || parent).toLowerCase().includes(query) || (r.ref ?? '').toLowerCase().includes(query);
-      });
-      return { ...t, rows };
-    }).filter((t) => t.rows.length);
-  }, [tab, query]);
+  const matchesRow = (t: (typeof LAB_TABS)[number], i: number) => {
+    const r = t.rows[i];
+    if (!query) return false;
+    // a continuation row (no name) matches through the row above it
+    let name = r.name;
+    for (let k = i; !name && k > 0; k--) name = t.rows[k - 1].name;
+    return name.toLowerCase().includes(query) || (r.ref ?? '').toLowerCase().includes(query);
+  };
+  const tabHits = useMemo(() => new Set(LAB_TABS.filter((t) => t.rows.some((_, i) => matchesRow(t, i))).map((t) => t.id)), [query]);
+  // jump to a tab that has matches when the current one has none, then scroll to the first match
+  useEffect(() => {
+    if (!query) return;
+    if (!tabHits.has(tab) && tabHits.size) setTab([...tabHits][0]);
+  }, [query]);
+  useEffect(() => {
+    if (!query) return;
+    body.current?.querySelector('[data-hit="1"]')?.scrollIntoView({ block: 'center' });
+  }, [query, tab]);
+  const t = LAB_TABS.find((x) => x.id === tab)!;
   return (
-    <FloatingPanel title="Lab Values" onClose={onClose} initial={{ x: Math.max(0, window.innerWidth - 440), y: 64, w: 432, h: Math.min(640, window.innerHeight - 130) }} testId="lab-panel">
-      <div className="bg-white px-2 pb-1 pt-2">
+    <div
+      role="dialog"
+      aria-label="Lab Values"
+      data-testid="lab-panel"
+      className="fixed right-0 z-40 flex flex-col border-l-2 border-navy"
+      style={{ top, bottom, width, maxWidth: '100vw', background: '#d6dbe8' }}
+    >
+      {/* resize by dragging the left edge */}
+      <div
+        className="absolute left-0 top-0 h-full w-1.5 -translate-x-1 cursor-ew-resize"
+        style={{ touchAction: 'none' }}
+        onPointerDown={(e) => {
+          drag.current = { x: e.clientX, w: width };
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => drag.current && setWidth(Math.max(320, Math.min(window.innerWidth - 40, drag.current.w - (e.clientX - drag.current.x))))}
+        onPointerUp={() => (drag.current = null)}
+        aria-hidden="true"
+      />
+      <div className="flex items-center justify-between bg-white px-3 pt-2">
+        <span className="text-[15px] font-bold text-navy">Lab Values</span>
+        <CloseBox onClick={onClose} label="Close Lab Values" />
+      </div>
+      <div className="bg-white px-3 pb-1 pt-2">
         <div className="flex items-center justify-between gap-2">
-          <input className="field w-40" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search lab values" data-testid="lab-search" />
+          <input className="field w-48" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search lab values" data-testid="lab-search" />
           <label className="flex items-center gap-1 text-xs">
-            <input type="checkbox" checked={si} onChange={(e) => setSi(e.target.checked)} /> SI Reference Intervals
+            <input type="checkbox" checked={si} onChange={(e) => setSi(e.target.checked)} data-testid="lab-si" /> SI Reference Intervals
           </label>
         </div>
         <div className="mt-3 flex flex-wrap gap-1" role="tablist">
-          {LAB_TABS.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id && !query} className="rounded-t border border-b-0 border-gray-400 px-2 py-0.5 text-xs" style={{ background: tab === t.id && !query ? '#d6dbe8' : '#fff' }} onClick={() => { setTab(t.id); setQ(''); }}>
-              {t.label}
+          {LAB_TABS.map((x) => (
+            <button
+              key={x.id}
+              role="tab"
+              aria-selected={tab === x.id}
+              data-testid={`lab-tab-${x.id}`}
+              data-hit={tabHits.has(x.id) ? '1' : '0'}
+              className="rounded-t border border-b-0 border-gray-400 px-2 py-0.5 text-xs"
+              style={{ background: tabHits.has(x.id) ? '#fde047' : tab === x.id ? '#d6dbe8' : '#fff', fontWeight: tab === x.id ? 700 : 400 }}
+              onClick={() => setTab(x.id)}
+            >
+              {x.label}
             </button>
           ))}
         </div>
       </div>
-      <div className="px-1 pb-2 text-[12px]" data-testid="lab-rows">
-        {shown.length === 0 && <div className="p-3">No lab value matches “{q}”.</div>}
-        {shown.map((t) => (
-          <table key={t.id} className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-gray-400">
-                <th className="py-1 text-left font-normal">{t.title}</th>
-                <th className="py-1 text-left font-normal">{si ? 'SI Reference Intervals' : 'Reference Range'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {t.rows.map((r, i) =>
-                r.kind === 'group' ? (
-                  <tr key={i} className="border-b border-gray-400">
-                    <td colSpan={2} className="py-[3px] italic">{r.name}</td>
-                  </tr>
-                ) : (
-                  <tr key={i} className="border-b border-gray-400">
-                    <td className="py-[3px] pr-2" style={{ paddingLeft: r.indent ? 16 : 0 }}>{r.name}</td>
-                    <td className="py-[3px]">{si ? r.si : r.ref}</td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        ))}
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 text-[12.5px]" data-testid="lab-rows">
+        <table className="w-full border-collapse">
+          <thead className="sticky top-0" style={{ background: '#d6dbe8' }}>
+            <tr className="border-b border-gray-400">
+              <th className="py-1 text-left font-bold">{t.title}</th>
+              <th className="py-1 text-left font-bold">Reference Range</th>
+              {si && <th className="py-1 text-left font-bold" data-testid="lab-si-col">SI Reference Intervals</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {t.rows.map((r, i) => {
+              const hit = matchesRow(t, i);
+              return r.kind === 'group' ? (
+                <tr key={i} className="border-b border-gray-400">
+                  <td colSpan={si ? 3 : 2} className="py-[3px] italic">{r.name}</td>
+                </tr>
+              ) : (
+                <tr key={i} className="border-b border-gray-400" data-hit={hit ? '1' : '0'}>
+                  <td className="py-[3px] pr-2" style={{ paddingLeft: r.indent ? 16 : 0 }}>
+                    <Marked text={r.name} q={query} />
+                  </td>
+                  <td className="py-[3px] pr-2">
+                    <Marked text={r.ref ?? ''} q={query} />
+                  </td>
+                  {si && <td className="py-[3px]">{r.si}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
         <div className="pt-2 text-[11px] text-gray-600">Typical adult reference ranges. Individual laboratories differ.</div>
       </div>
-    </FloatingPanel>
+    </div>
   );
 }
 

@@ -31,6 +31,8 @@ export interface Question {
   choiceSource?: 'auto' | 'manual';
   /** user asked for bubbles on this question even though choices were detected */
   forceBubbles?: boolean;
+  /** the user changed the number of bubbles by hand (+ / −) */
+  choiceCountSet?: boolean;
   /** the user drew this question's area by hand: automatic adjustments leave it alone */
   areaManual?: boolean;
   /** 0–1; below 0.6 is shown as a low-confidence warning on the key check screen */

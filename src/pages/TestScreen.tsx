@@ -80,7 +80,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [now, setNow] = useState(Date.now());
   const [panel, setPanel] = useState<{ labs: boolean; calc: boolean; notes: boolean }>({ labs: false, calc: false, notes: false });
   const [menu, setMenu] = useState(false);
-  const [modal, setModal] = useState<null | 'grid' | 'end' | 'confirm' | 'help'>(null);
+  const [modal, setModal] = useState<null | 'grid' | 'end' | 'confirm' | 'help' | 'timer'>(null);
   const [navFilter, setNavFilter] = useState<null | 'marked' | 'incomplete'>(null);
   const [filter, setFilter] = useState<Filter>((FILTERS.find((f) => f.id === startFilter)?.id ?? 'all') as Filter);
   const [showElapsed, setShowElapsed] = useState(false);
@@ -825,8 +825,8 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                         onCount={
                           testing && exam && !itemLocked
                             ? (dlt) => {
-                                const n = Math.max(2, Math.min(26, question.choiceCount + dlt));
-                                const e2 = { ...exam, questions: exam.questions.map((q) => (q.id === question.id ? { ...q, choiceCount: n } : q)) };
+                                const n = Math.max(2, Math.min(26, choiceLetters(question).length + dlt));
+                                const e2 = { ...exam, questions: exam.questions.map((q) => (q.id === question.id ? { ...q, choiceCount: n, choiceCountSet: true } : q)) };
                                 setExams((m) => new Map(m).set(e2.id, e2));
                                 void saveExam(e2);
                               }
@@ -894,7 +894,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 Review · {a.items.filter(isCorrect).length} of {a.items.length} correct
               </div>
             ) : (
-              <button type="button" className="status-font border border-white px-2 py-1 text-left text-[13px]" onClick={() => setShowElapsed((s) => !s)} title="Click to switch between time remaining and time elapsed" data-testid="timer">
+              <button type="button" className="status-font border border-white px-2 py-1 text-left text-[13px]" onClick={() => setModal('timer')} title="Timer and mode: switch Timed / Tutor, add time" data-testid="timer">
                 {remMs != null && !showElapsed ? (
                   <>
                     Block Time Remaining <span data-testid="timer-value" style={{ color: remMs <= 5 * 60_000 ? '#ffd24a' : undefined }}>{T.fmtClock(remMs)}</span>
@@ -990,6 +990,72 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
             <button className="btn-primary" onClick={finishBlock} data-testid="confirm-end" autoFocus>
               End Block
             </button>
+          </div>
+        </Modal>
+      )}
+      {modal === 'timer' && (
+        <Modal title="Timer and mode" onClose={() => setModal(null)}>
+          <div className="space-y-4 text-sm" data-testid="timer-popup">
+            <div>
+              <div className="mb-1 font-bold">Mode for this block</div>
+              {(
+                [
+                  ['exam', 'Timed', 'Answers and explanations stay hidden until the block ends.'],
+                  ['tutor', 'Tutor', 'Submit each answer to see if it is right and read the explanation, then “Proceed to Next Item”.'],
+                  ['untimed', 'Untimed', 'Like Timed, without a countdown.'],
+                ] as const
+              ).map(([m, label, help]) => (
+                <label key={m} className="mb-1 flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="mode"
+                    checked={a.mode === m}
+                    data-testid={`timer-mode-${m}`}
+                    onChange={() =>
+                      commit((d) => {
+                        d.mode = m;
+                        const bl = block(d);
+                        // timed needs a limit: give the time used so far plus the usual time for the questions left
+                        if (m === 'exam' && bl.limitMs == null) {
+                          const left = d.items.slice(bl.start, bl.end).filter((it) => !it.locked && !it.answer).length;
+                          bl.limitMs = T.elapsed(bl.timer, Date.now()) + Math.max(1, left) * (d.settings.secPerQ ?? 90) * 1000;
+                        }
+                        if (m !== 'exam') bl.limitMs = null;
+                      })
+                    }
+                  />
+                  <span>
+                    <b>{label}</b>
+                    <span className="block text-xs text-gray-600">{help}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {a.mode === 'exam' && b.limitMs != null && (
+              <div>
+                <div className="mb-1 font-bold">Add time</div>
+                <div className="flex flex-wrap gap-2">
+                  {[5, 10, 15, 30].map((m) => (
+                    <button key={m} className="btn" data-testid={`add-time-${m}`} onClick={() => commit((d) => void (block(d).limitMs = (block(d).limitMs ?? 0) + m * 60_000))}>
+                      +{m} min
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-1 text-xs text-gray-600" data-testid="timer-popup-remaining">Time remaining: {T.fmtClock(remMs ?? 0)}</div>
+              </div>
+            )}
+            <div>
+              <div className="mb-1 font-bold">Show</div>
+              <label className="mr-4">
+                <input type="radio" name="show" checked={!showElapsed} onChange={() => setShowElapsed(false)} disabled={remMs == null} /> Time remaining
+              </label>
+              <label>
+                <input type="radio" name="show" checked={showElapsed || remMs == null} onChange={() => setShowElapsed(true)} /> Time elapsed
+              </label>
+            </div>
+            <div className="flex justify-end">
+              <button className="btn-primary" onClick={() => setModal(null)} data-testid="timer-done">Done</button>
+            </div>
           </div>
         </Modal>
       )}

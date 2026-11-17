@@ -104,6 +104,10 @@ export const LAB_TABS: LabTab[] = [
       r('IgE', '0–380 IU/mL', '0–380 kIU/L'),
       r('IgG', '650–1500 mg/dL', '6.5–15.0 g/L'),
       r('IgM', '50–300 mg/dL', '0.5–3.0 g/L'),
+      g('Gases, Arterial Blood (Room Air)'),
+      r('Po₂', '75–105 mm Hg', '10.0–14.0 kPa'),
+      r('Pco₂', '33–45 mm Hg', '4.4–5.9 kPa'),
+      r('pH', '7.35–7.45', '[H⁺] 36–44 nmol/L'),
     ],
   },
   {
@@ -124,10 +128,6 @@ export const LAB_TABS: LabTab[] = [
     label: 'Blood',
     title: 'HEMATOLOGIC',
     rows: [
-      g('Gases, Arterial Blood (Room Air)'),
-      r('Po₂', '75–105 mm Hg', '10.0–14.0 kPa'),
-      r('Pco₂', '33–45 mm Hg', '4.4–5.9 kPa'),
-      r('pH', '7.35–7.45', '[H⁺] 36–44 nmol/L'),
       g('Complete Blood Count'),
       r('Hematocrit', 'Male: 41%–53%', '0.41–0.53'),
       r('', 'Female: 36%–46%', '0.36–0.46'),
@@ -173,7 +173,7 @@ export const LAB_TABS: LabTab[] = [
       r('Oxalate', '8–40 μg/mL', '90–445 μmol/L'),
       r('Proteins, total', '<150 mg/24 h', '<0.15 g/24 h'),
       g('Body Mass Index (BMI)'),
-      r('Body mass index', 'Adult: 19–25 kg/m²', '19–25 kg/m²'),
+      r('Body mass index (BMI)', 'Adult: 19–25 kg/m²', ''),
     ],
   },
 ];

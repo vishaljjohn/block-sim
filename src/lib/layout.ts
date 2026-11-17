@@ -23,11 +23,12 @@ export function usesChoiceRegions(exam: Exam, q: Question): boolean {
   return !exam.alwaysBubbles && !q.forceBubbles && !!q.choices && q.choices.length >= 2;
 }
 
+/**
+ * Letters to offer. With detected choices, the bubbles start at the number of choices found on the page (the
+ * user can add or remove with + / −, which sets choiceCountSet); otherwise the key-based default.
+ */
 export function choiceLetters(q: Question): string[] {
-  if (q.choices && q.choices.length >= 2 && !q.forceBubbles) {
-    const ls = q.choices.map((c) => c.letter);
-    const n = Math.max(ls.length, q.choiceCount);
-    return Array.from({ length: n }, (_, i) => String.fromCharCode(65 + i));
-  }
-  return Array.from({ length: q.choiceCount }, (_, i) => String.fromCharCode(65 + i));
+  const detected = q.choices && q.choices.length >= 2 ? q.choices.length : 0;
+  const n = q.choiceCountSet ? q.choiceCount : detected || q.choiceCount;
+  return Array.from({ length: Math.max(2, Math.min(26, n)) }, (_, i) => String.fromCharCode(65 + i));
 }

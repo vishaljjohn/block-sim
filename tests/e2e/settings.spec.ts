@@ -70,3 +70,28 @@ test('settings panel: theme, size, bold, layout, highlighting; strike buttons; m
   // review is read-only: no strike buttons
   await expect(page.getByTestId('strike-B')).toHaveCount(0);
 });
+
+test('timer pop-up: switch to Tutor mid-block, back to Timed, add time', async ({ page }) => {
+  await freshStart(page);
+  await page.goto('./#/exam/demo-exam');
+  await startBlock(page, { mode: 'exam' });
+  await page.getByTestId('timer').click();
+  await expect(page.getByTestId('timer-popup')).toBeVisible();
+  await page.getByTestId('timer-mode-tutor').check();
+  await page.getByTestId('timer-done').click();
+  await expect(page.getByTestId('test-screen')).toHaveAttribute('data-mode', 'tutor');
+  const pickA = page.getByTestId('choice-A').or(page.getByTestId('bubble-A')).first();
+  await pickA.click();
+  await page.getByTestId('submit').click();
+  await expect(page.getByTestId('explanation-panel')).toBeVisible();
+  await expect(page.getByTestId('proceed')).toBeVisible();
+  await page.getByTestId('proceed').click();
+  await expect(page.getByTestId('item-n')).toHaveText('2');
+  await page.getByTestId('timer').click();
+  await page.getByTestId('timer-mode-exam').check();
+  const before = await page.getByTestId('timer-popup-remaining').textContent();
+  await page.getByTestId('add-time-10').click();
+  const after = await page.getByTestId('timer-popup-remaining').textContent();
+  const secs = (s: string | null) => s!.replace(/.*: /, '').split(':').reduce((a, b) => a * 60 + Number(b), 0);
+  expect(secs(after) - secs(before)).toBeGreaterThanOrEqual(598);
+});

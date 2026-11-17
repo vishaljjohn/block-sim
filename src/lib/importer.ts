@@ -74,13 +74,15 @@ export function applyKey(questions: Question[], key: ParsedKey, keepExisting = f
   const count = Math.min(26, maxLetter + 1);
   return questions.map((q) => {
     const e = byN.get(q.number + offset);
-    const out: Question = { ...q, choiceCount: Math.max(q.choices?.length ?? 0, count) };
+    // detected choices decide the count; the key's highest letter is only the default when none were found
+    const out: Question = { ...q, choiceCount: q.choices?.length ? q.choices.length : count };
     if (!e) return out;
     if (!(keepExisting && q.answer)) out.answer = e.answer;
     if (!(keepExisting && q.explanation)) out.explanation = e.explanation;
     out.keyConfidence = e.conf;
     const tags = key.tags[e.n];
     if (tags?.length && !q.tags.length) out.tags = tags;
+    if (out.answer && out.answer.charCodeAt(0) - 65 >= out.choiceCount) out.choiceCount = out.answer.charCodeAt(0) - 64;
     if (!out.answer && e.answerText) {
       const letter = q.choiceTexts?.length ? resolveAnswerText(e.answerText, q.choiceTexts) : '';
       if (letter) {
