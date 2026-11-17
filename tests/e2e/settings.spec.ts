@@ -95,3 +95,31 @@ test('timer pop-up: switch to Tutor mid-block, back to Timed, add time', async (
   const secs = (s: string | null) => s!.replace(/.*: /, '').split(':').reduce((a, b) => a * 60 + Number(b), 0);
   expect(secs(after) - secs(before)).toBeGreaterThanOrEqual(598);
 });
+
+test('review: highlight in the explanation (kept), question fits at XL next to the explanation', async ({ page }, info) => {
+  test.skip(info.project.name === 'ipad', 'mouse selection');
+  await freshStart(page);
+  await page.goto('./#/exam/demo-exam');
+  await startBlock(page, { mode: 'untimed' });
+  await page.getByTestId('end-block').click();
+  await page.getByTestId('grid-end').click();
+  await page.getByTestId('confirm-end').click();
+  await page.getByTestId('review-all').click();
+  await page.getByTestId('btn-settings').click();
+  await page.getByTestId('size-XL').click();
+  await page.keyboard.press('Escape');
+  const qv = (await page.getByTestId('question-view').boundingBox())!;
+  const ex = (await page.getByTestId('explanation-panel').boundingBox())!;
+  expect(qv.x + qv.width).toBeLessThanOrEqual(ex.x + 2);
+  expect(ex.x + ex.width).toBeLessThanOrEqual((page.viewportSize()?.width ?? 1366) + 1);
+  // select some words in the explanation → highlighted, and still there after a reload
+  const t = page.getByTestId('explanation-text').locator('span').first();
+  const b = (await t.boundingBox())!;
+  await page.mouse.move(b.x + 2, b.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 120, b.y + 6, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByTestId('expl-highlight').first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId('expl-highlight').first()).toBeVisible();
+});

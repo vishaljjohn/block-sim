@@ -34,8 +34,9 @@ import { classifyChange, isCorrect } from '../lib/score';
 import { choiceLetters, segmentRect, usesChoiceRegions } from '../lib/layout';
 import { examPdf, pageSize, renderPage, type PdfDoc } from '../lib/pdf';
 import { setOcrConcurrency } from '../lib/ocr';
-import { SIZE_FACTOR, useDisplay } from '../lib/display';
+import { useDisplay } from '../lib/display';
 import { DisplaySettings } from '../ui/DisplaySettings';
+import { HighlightableText } from '../ui/HighlightableText';
 import { startTicker } from '../lib/ticker';
 import { createSnapshot, markReviewed, patchSettings, saveAttempt, saveExam } from '../lib/store';
 import { go, useElementWidth, useLive } from '../ui/hooks';
@@ -446,8 +447,10 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const showExplain = reveal;
   const answerCol = clickable ? 0 : 168;
   const explainW = showExplain ? Math.max(300, Math.min(520, Math.round(areaW * 0.36))) : 0;
-  const baseW = Math.max(280, Math.min(1180, areaW - 44 - answerCol - explainW - (showExplain ? 24 : 0)));
-  const qWidth = Math.round(baseW * SIZE_FACTOR[display.size]);
+  // the question always fits next to the bubbles and the explanation: a larger text size uses the free width, never more
+  const avail = Math.max(280, areaW - 44 - answerCol - explainW - (showExplain ? 24 : 0));
+  const SIZE_CAP = { S: 820, M: 1000, L: 1180, XL: 1600 } as const;
+  const qWidth = Math.round(Math.min(avail, SIZE_CAP[display.size]));
 
   useEffect(() => {
     if (!a || !doc || qWidth <= 0) return;
@@ -841,9 +844,13 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                       <div className="mb-2 inline-block border border-b-0 border-gray-300 px-3 py-1 text-[16px]">Explanation</div>
                       <div className="mb-3 text-[14px]">Correct Answer: {cur.key ? `${cur.key}.` : '(none in the answer key)'}</div>
                       {question?.explanation ? (
-                        question.explanation.split(/\n{2,}/).map((para, i) => (
-                          <p key={i} className="mb-3 whitespace-pre-wrap">{para}</p>
-                        ))
+                        <HighlightableText
+                          text={question.explanation}
+                          highlights={cur.explHighlights ?? []}
+                          color={display.highlightColor}
+                          testId="explanation-text"
+                          onChange={review || itemLocked ? (h) => editItem((it) => ({ ...it, explHighlights: h })) : undefined}
+                        />
                       ) : (
                         <p className="mb-3 text-gray-600">No explanation was found in the answer key for this question.</p>
                       )}

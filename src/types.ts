@@ -147,6 +147,8 @@ export interface AttemptItem {
   tags: string[];
   reviewNote: string;
   missReason: MissReason | null;
+  /** highlights the user made in the explanation while reviewing (character offsets) */
+  explHighlights?: { s: number; e: number; color?: HighlightColor }[];
 }
 
 export interface TimerState {
