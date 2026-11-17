@@ -226,3 +226,22 @@ describe('highlight colors', () => {
     expect(addWordRange([], 1, 0, 1, 'd', 'yellow')[0]).not.toHaveProperty('color');
   });
 });
+
+describe('partial-word highlights', () => {
+  const ws: Word[] = [
+    { t: 'Hematocrit', x: 0.1, y: 0.1, w: 0.1, h: 0.02, c: 99 },
+    { t: '43%', x: 0.3, y: 0.1, w: 0.03, h: 0.02, c: 99 },
+  ];
+  it('stores character offsets and draws only those characters', async () => {
+    const { addWordRange, charAt, rectsForRange } = await import('../../src/lib/highlights');
+    expect(charAt(ws[1], 0.32)).toBe(2);
+    const [h] = addWordRange([], 1, { w: 1, c: 2 }, { w: 1, c: 3 }, 'p', 'yellow', ws);
+    expect(h).toMatchObject({ start: 1, end: 1, sc: 2 });
+    expect(h.kind === 'words' && h.ec).toBeFalsy(); // runs to the end of the word
+    const r = rectsForRange(ws, 1, 1, 2);
+    expect(r[0].x).toBeCloseTo(0.32, 5);
+    expect(r[0].w).toBeCloseTo(0.01, 5);
+    const [whole] = addWordRange([], 1, 0, 0, 'w', 'yellow', ws);
+    expect(whole).not.toHaveProperty('sc');
+  });
+});

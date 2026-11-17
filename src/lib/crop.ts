@@ -238,3 +238,93 @@ export function highlightedChoice(px: Pixels, choices: { letter: string; x: numb
   const second = Math.max(0, ...score.filter((_, i) => i !== best));
   return score[best] > 0.12 && score[best] > second * 3 ? choices[best].letter : null;
 }
+
+/** Rows with ink (dark pixels) inside a rectangle, merged into bands (page fractions). */
+export function inkBands(px: Pixels, within: Rect): [number, number][] {
+  const { data, width: W, height: H } = px;
+  const x0 = Math.max(0, Math.floor(within.x * W));
+  const x1 = Math.min(W - 1, Math.ceil((within.x + within.w) * W));
+  const y0 = Math.max(0, Math.floor(within.y * H));
+  const y1 = Math.min(H - 1, Math.ceil((within.y + within.h) * H));
+  const bands: [number, number][] = [];
+  let start = -1;
+  let gap = 0;
+  for (let y = y0; y <= y1 + 1; y++) {
+    let ink = false;
+    if (y <= y1) {
+      let n = 0;
+      for (let x = x0; x <= x1; x++) {
+        if (lum(data, (y * W + x) * 4) < 200) n++;
+        if (n >= 2) {
+          ink = true;
+          break;
+        }
+      }
+    }
+    if (ink) {
+      if (start < 0) start = y;
+      gap = 0;
+    } else if (start >= 0) {
+      gap++;
+      if (gap > H * 0.006 || y > y1) {
+        bands.push([start / H, (y - gap + 1) / H]);
+        start = -1;
+        gap = 0;
+      }
+    }
+  }
+  return bands;
+}
+
+/**
+ * Find the page's own radio-button circles: for each choice line (label position, page fractions), look just left
+ * of the label for a small, roughly round, dark ring. Returns one rect per line (or null).
+ */
+export function findRadios(px: Pixels, labels: { x: number; y: number; h: number }[]): (Rect | null)[] {
+  const { data, width: W, height: H } = px;
+  const dark = (x: number, y: number) => lum(data, (y * W + x) * 4) < 175;
+  return labels.map((l) => {
+    const hPx = l.h * H;
+    const x1 = Math.floor(l.x * W) - 1;
+    const x0 = Math.max(0, Math.floor(x1 - hPx * 3.2));
+    const y0 = Math.max(0, Math.floor(l.y * H - hPx * 0.35));
+    const y1 = Math.min(H - 1, Math.ceil(l.y * H + hPx * 1.35));
+    if (x1 <= x0 + 2) return null;
+    // the right-most blob of dark pixels before the label: walk left past the gap, then collect the blob
+    const colDark = (x: number) => {
+      for (let y = y0; y <= y1; y++) if (dark(x, y)) return true;
+      return false;
+    };
+    let x = x1;
+    let gapRun = 0;
+    // skip the label's own left edge if we started inside it
+    while (x > x0 && colDark(x)) x--;
+    while (x > x0 && !colDark(x)) {
+      x--;
+      gapRun++;
+    }
+    if (x <= x0 || gapRun > hPx * 2.5) return null;
+    const bx1 = x;
+    while (x > x0 && colDark(x)) x--;
+    const bx0 = x + 1;
+    let by0 = y1;
+    let by1 = y0;
+    let n = 0;
+    for (let yy = y0; yy <= y1; yy++)
+      for (let xx = bx0; xx <= bx1; xx++)
+        if (dark(xx, yy)) {
+          n++;
+          if (yy < by0) by0 = yy;
+          if (yy > by1) by1 = yy;
+        }
+    const w = bx1 - bx0 + 1;
+    const h = by1 - by0 + 1;
+    if (w < hPx * 0.45 || w > hPx * 1.9 || h < hPx * 0.45 || h > hPx * 1.9) return null;
+    if (w / h < 0.7 || w / h > 1.4) return null;
+    // a ring is hollow: the centre is light
+    const cx = Math.round((bx0 + bx1) / 2);
+    const cy = Math.round((by0 + by1) / 2);
+    if (dark(cx, cy) && n > w * h * 0.6) return null;
+    return { x: bx0 / W, y: by0 / H, w: w / W, h: h / H };
+  });
+}

@@ -14,13 +14,14 @@ export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 // radio glyph read by OCR in front of the label: "O", "Q", "©", "(®", "©)", "(O" (glued: "(OE)"), "()", "[]"
 const RADIO = '(?:[^\\w\\s]{0,2}[O0oQ©®○◯●◉◎@¤][^\\w\\s]{0,2}\\s*(?=\\(?[A-Za-z][.)])|[CDGU](?=[A-Z][.)]\\s)|[^\\w\\s]{1,3}\\s*|[(\\[]\\s*[)\\]]\\s*)?';
 // OCR sometimes reads the period after the letter as a comma ("A, Aspirin")
-const CHOICE_RE = new RegExp(`^${RADIO}(?:\\(([A-Za-z])\\)|([A-Za-z])\\s?[.):]|([A-Z]),(?=\\s))(?:\\s+|$)(.*)$`);
+const CHOICE_RE = new RegExp(`^${RADIO}(?:\\(([A-Za-z0])\\)|([A-Za-z0])\\s?[.):]|([A-Z]),(?=\\s))(?:\\s+|$)(.*)$`);
 const START_RES = [/^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\s*#?\s*)?(\d{1,3})\s*[.):]\s*(\S.*)?$/i, /^Question\s*#?\s*(\d{1,3})\b(.*)$/i, /^Q\s*(\d{1,3})\b(.*)$/];
 
 export function matchChoiceLabel(text: string): { letter: string; rest: string } | null {
   const m = CHOICE_RE.exec(text.trim());
   if (!m) return null;
-  const letter = (m[1] ?? m[2] ?? m[3]).toUpperCase();
+  // OCR reads the letter O as a zero
+  const letter = (m[1] ?? m[2] ?? m[3]).toUpperCase().replace('0', 'O');
   return { letter, rest: (m[4] ?? '').trim() };
 }
 
@@ -93,7 +94,7 @@ export interface ChoiceDetection {
  * right part so both columns are found. Right parts get their own column number.
  */
 function splitChoiceColumns(lines: Line[], words: Word[]): Line[] {
-  const label = /^(?:\(?[A-Za-z]\)|[A-Za-z][.)])$/;
+  const label = /^(?:\(?[A-Za-z0]\)|[A-Za-z0][.)])$/;
   const radio = /^[O0oQ©®○◯●◉◎@¤]$/;
   const out: Line[] = [];
   for (const l of lines) {
@@ -128,7 +129,7 @@ function splitChoiceColumns(lines: Line[], words: Word[]): Line[] {
   return out;
 }
 
-export function detectChoices(lines: Line[], page: number, region: Rect | null = null, words?: Word[]): ChoiceDetection {
+export function detectChoices(lines: Line[], page: number, region: Rect | null = null, words?: Word[], radios?: Rect[]): ChoiceDetection {
   const ls = (words ? splitChoiceColumns(lines, words) : lines).filter((l) => !region || inside(l, region, 0.02)).sort((a, b) => a.column - b.column || a.y - b.y);
   const cands = ls.map((l, i) => ({ i, l, m: matchChoiceLabel(l.text) })).filter((c) => c.m);
   let best: typeof cands = [];
@@ -191,6 +192,13 @@ export function detectChoices(lines: Line[], page: number, region: Rect | null =
       const size = Math.max(first.w, first.h * 0.8);
       reg.radio = { x: first.x + first.w / 2 - size / 2, y: first.y + first.h / 2 - size / 2, w: size, h: size };
       reg.x = Math.min(reg.x, first.x - 0.004);
+      reg.w = right - reg.x + 0.012;
+    }
+    // a circle found in the page pixels beats an OCR guess: same line, just left of the label
+    const pix = radios?.filter((r) => r.y + r.h / 2 >= c.l.y - lineH * 0.2 && r.y + r.h / 2 <= c.l.y + lineH * 1.2 && r.x + r.w / 2 < labelX + lineH * 1.2 && r.x + r.w / 2 > labelX - lineH * 3).sort((a, b) => b.x - a.x)[0];
+    if (pix) {
+      reg.radio = pix;
+      reg.x = Math.min(reg.x, pix.x - 0.004);
       reg.w = right - reg.x + 0.012;
     }
     choices.push(reg);
@@ -378,13 +386,16 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
       const colTop = Math.min(...p.lines.filter((l) => l.column === c).map((l) => l.y), bottom);
       // part of the column before its first start continues the previous question
       const first = inCol[0];
-      if (st.cur && (!first || first.y - colTop > 0.02)) {
+      // text above the first new question continues the previous one; pictures with no text above it belong to
+      // the new question (exhibits are often placed above the stem) and must never be cut off
+      const textAbove = first ? p.lines.filter((l) => (ncols === 1 || l.column === c) && l.y + l.h <= first.y - 0.004) : [];
+      if (st.cur && (!first || textAbove.length > 0)) {
         const y1 = first ? first.y - PAD : bottom;
         if (y1 - colTop > 0.01) st.cur.segments.push({ page: p.page, rect: clampRect(colRect(c, Math.max(top, colTop - PAD), y1)) });
       }
       inCol.forEach((s, k) => {
         const next = inCol[k + 1];
-        const y0 = Math.max(top, s.y - PAD);
+        const y0 = k === 0 && textAbove.length === 0 ? top : Math.max(top, s.y - PAD);
         const y1 = next ? next.y - PAD : bottom;
         st.cur = { number: s.n, segments: [{ page: p.page, rect: clampRect(colRect(c, y0, y1)) }] };
         questions.push(st.cur);
@@ -399,7 +410,8 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
       if (!s.rect || !p) continue;
       const onlyThis = (pageStarts.get(s.page)?.length ?? 0) <= 1 && p.colLeft.length <= 1;
       const startsAtTop = s.rect.y <= (p.content?.y ?? 0) + 0.05 || p.lines.every((l) => l.y >= s.rect!.y - 0.01);
-      if (onlyThis && startsAtTop) s.rect = undefined;
+      const reachesBottom = s.rect.y + s.rect.h >= (p.content ? p.content.y + p.content.h : 1) - 0.01;
+      if (onlyThis && startsAtTop && reachesBottom) s.rect = undefined;
     }
   }
 
@@ -463,4 +475,33 @@ function linesIn(p: PageLines, r: Rect | undefined): Line[] {
 /** Lines of a page that fall inside a question's visible area. */
 export function linesForSegment(p: PageLines, r: Rect | undefined): Line[] {
   return linesIn(p, r);
+}
+
+/**
+ * Safety net: nothing visible may be dropped. Any band of ink on a page that no question area covers is added
+ * to the question just below it (or, at the bottom of the page, the one above it).
+ */
+export function coverInk(questions: { segments: { page: number; rect?: Rect }[]; areaManual?: boolean }[], pages: { page: number; ink?: [number, number][]; autoCrop: Rect | null }[]): void {
+  for (const p of pages) {
+    if (!p.ink?.length) continue;
+    const all = questions.flatMap((q) => q.segments.filter((s) => s.page === p.page));
+    // areas drawn by hand count as covered but are never changed
+    const segs = questions.filter((q) => !q.areaManual).flatMap((q) => q.segments.filter((s) => s.page === p.page));
+    if (all.some((s) => !s.rect) || questions.some((q) => q.areaManual && q.segments.some((s) => s.page === p.page))) continue;
+    if (!segs.length) continue;
+    for (const [a, b] of p.ink) {
+      if (b - a < 0.004) continue;
+      const covered = segs.some((s) => s.rect!.y <= a + 0.002 && s.rect!.y + s.rect!.h >= b - 0.002);
+      if (covered) continue;
+      const below = segs.filter((s) => s.rect!.y >= a - 0.002).sort((x, y) => x.rect!.y - y.rect!.y)[0];
+      if (below) {
+        const bottom = below.rect!.y + below.rect!.h;
+        below.rect!.y = Math.max(0, a - 0.006);
+        below.rect!.h = bottom - below.rect!.y;
+        continue;
+      }
+      const above = segs.filter((s) => s.rect!.y < a).sort((x, y) => y.rect!.y + y.rect!.h - (x.rect!.y + x.rect!.h))[0];
+      if (above) above.rect!.h = Math.min(1, b + 0.006) - above.rect!.y;
+    }
+  }
 }

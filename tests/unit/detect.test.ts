@@ -269,3 +269,43 @@ describe('auto-crop with light toolbars', () => {
     expect(r.y + r.h).toBeLessThan(60 / H);
   });
 });
+
+describe('never drop a picture', () => {
+  it('a picture above the question number stays with the question', () => {
+    const lay = detectLayout([pageLines(1, words([[0.05, 0.5, '16. A man fell off his bicycle and more'], [0.07, 0.6, 'A) one'], [0.07, 0.63, 'B) two'], [0.07, 0.66, 'C) three']]))]);
+    expect(lay.questions[0].segments[0].rect).toBeUndefined(); // whole (cropped) page, pictures included
+  });
+  it('ink outside every question area is added to the nearest question', async () => {
+    const { coverInk } = await import('../../src/lib/detect');
+    const qs = [{ segments: [{ page: 1, rect: { x: 0, y: 0.5, w: 1, h: 0.2 } }] }, { segments: [{ page: 1, rect: { x: 0, y: 0.72, w: 1, h: 0.2 } }] }];
+    coverInk(qs, [{ page: 1, autoCrop: null, ink: [[0.1, 0.45], [0.5, 0.7], [0.72, 0.9], [0.93, 0.97]] }]);
+    expect(qs[0].segments[0].rect.y).toBeLessThanOrEqual(0.1);
+    expect(qs[1].segments[0].rect.y + qs[1].segments[0].rect.h).toBeGreaterThanOrEqual(0.97);
+  });
+});
+
+describe('radio circles from pixels', () => {
+  it('finds a ring left of each label and ignores solid blobs', async () => {
+    const { findRadios } = await import('../../src/lib/crop');
+    const W = 400;
+    const H = 200;
+    const data = new Uint8ClampedArray(W * H * 4).fill(255);
+    const ring = (cx: number, cy: number, r: number) => {
+      for (let y = cy - r - 1; y <= cy + r + 1; y++)
+        for (let x = cx - r - 1; x <= cx + r + 1; x++) {
+          const d = Math.hypot(x - cx, y - cy);
+          if (d <= r + 0.7 && d >= r - 1.3) data.set([40, 40, 40, 255], (y * W + x) * 4);
+        }
+    };
+    ring(50, 50, 7);
+    for (let y = 100; y < 112; y++) for (let x = 44; x < 56; x++) data.set([0, 0, 0, 255], (y * W + x) * 4); // solid square: not a radio
+    const res = findRadios({ data, width: W, height: H }, [
+      { x: 70 / W, y: 43 / H, h: 14 / H },
+      { x: 70 / W, y: 99 / H, h: 14 / H },
+    ]);
+    expect(res[0]).not.toBeNull();
+    expect(Math.abs((res[0]!.x + res[0]!.w / 2) * W - 50)).toBeLessThan(1.5);
+    expect(Math.abs((res[0]!.y + res[0]!.h / 2) * H - 50)).toBeLessThan(1.5);
+    expect(res[1]).toBeNull();
+  });
+});

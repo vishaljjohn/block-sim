@@ -1,24 +1,18 @@
 # Block Sim: plan and status
 
-## STATUS (usage limit reached, 2026-11-16 ~12:00)
+## STATUS (2026-11-16, evening)
 
-Live: stable https://www.vishaljohn.com/block-sim/ · beta https://www.vishaljohn.com/block-sim/beta/
-(beta deploy was blocked by the Pages environment until it was allowed; the next CI run publishes it).
+- Stable `main` = v1.0.0 (Stages A–E) → https://www.vishaljohn.com/block-sim/
+- Beta `beta` = v1.0.0 + image zoom, display settings (theme/size/bold/layout/highlight colors), strike-out
+  buttons, student-test fixes, private-PDF robustness → https://www.vishaljohn.com/block-sim/beta/
+- Waiting on the owner: "promote to stable" → `git checkout main && git merge --ff-only beta && npm version minor
+  && git push origin main --follow-tags`.
+- All checks green: lint, 84 unit tests, e2e in Chromium/WebKit/iPad (51), live-site e2e.
+- Private PDFs: results in /private-results (local only).
 
-Done: Stages A–E built, committed, pushed (main + beta). Unit tests (79) and e2e (Chromium/WebKit/iPad) pass.
-Last commit adds private-PDF fixes; the newest local edits (radio "Q", mangled radio glyphs, one missing
-label, mean OCR confidence, in-order key reading) are committed by the final step below.
-
-In progress: `npm run private-test` running in the background → /private-results/*.json (local only, ignored).
-Results so far: text-layer exams 49–50/50 answers + choices; scanned exams 30–50/50 choices.
-
-Next steps, in order
-1. When the private run ends: `npm run build`, rerun failed/weak IDs with `ONLY=… REDO=1 npm run private-test`
-   (1-6 highlight key 34/50; 1-9, 1-10, 6-1 keys; 1-1/1-2 scanned choices), summarize numbers.
-2. Full checks: `npm run lint && npm test && npm run build:all && npx playwright test`.
-3. Fresh subagent: first-time student following README on the beta URL; fix everything it reports.
-4. Tag `v1.0.0` on main, push tags; final report (URLs, private numbers, 5-line checklist, known
-   problems, classmate text, HTML card).
+Possible next steps (not started)
+- Pomodoro timer button (seen in the owner's screenshot toolbar; not requested as a setting).
+- Scanned PDFs with very poor text recognition still fall back to bubbles on some pages.
 
 ## Decisions made so far (move to DECISIONS.md)
 - Test screen follows the reference screenshots: "Question Status" striped strip on the left; navy top bar with

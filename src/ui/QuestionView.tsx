@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AttemptItem, ChoiceRegion, Exam, Highlight, PageText, Question, Rect, Segment } from '../types';
 import type { PdfDoc } from '../lib/pdf';
 import { segmentRect, usesChoiceRegions } from '../lib/layout';
-import { addWordRange, boxFromDrag, highlightAt, rectsForRange, removeHighlight, wordAt } from '../lib/highlights';
+import { addWordRange, boxFromDrag, charAt, highlightAt, rectsForRange, removeHighlight, wordAt } from '../lib/highlights';
 import { uid } from '../db';
 import { PageView, type PageApi } from './PageView';
 import { ImageZoom } from './ImageZoom';
@@ -114,6 +114,9 @@ interface Drag {
   moved: boolean;
   w0: number;
   w1: number;
+  /** character offsets inside the start/end word (partial-word highlights) */
+  c0: number;
+  c1: number;
   choice: string | null;
   longDone: boolean;
 }
@@ -124,10 +127,45 @@ export function QuestionView(p: QuestionViewProps) {
   const [zoomed, setZoomed] = useState<{ page: number; rect: Rect } | null>(null);
   const display = useDisplay();
   /** manual highlighting: the selection waiting for a color */
-  const [pending, setPending] = useState<{ seg: number; page: number; w0: number; w1: number; x0: number; y0: number; x1: number; y1: number; px: number; py: number } | null>(null);
-  const makeHighlight = (sel: { page: number; w0: number; w1: number; x0: number; y0: number; x1: number; y1: number }, color: HighlightColor) => {
+  const [pending, setPending] = useState<{ seg: number; page: number; w0: number; w1: number; c0?: number; c1?: number; x0: number; y0: number; x1: number; y1: number; px: number; py: number } | null>(null);
+  /** words inside answer-choice areas: answer choices are struck out, never highlighted */
+  const blockedWords = (page: number): Set<number> => {
+    const out = new Set<number>();
+    const words = texts.get(page)?.words;
+    if (!words || !usesChoiceRegions(exam, question)) return out;
+    const cs = (question.choices ?? []).filter((c) => c.page === page);
+    words.forEach((w, i) => {
+      const cx = w.x + w.w / 2;
+      const cy = w.y + w.h / 2;
+      if (cs.some((c) => cx >= c.x - 0.03 && cx <= c.x + c.w + 0.01 && cy >= c.y && cy <= c.y + c.h)) out.add(i);
+    });
+    return out;
+  };
+  /** the selection, trimmed so it stops before any answer choice; null when nothing is left */
+  const clampSel = (page: number, w0: number, c0: number, w1: number, c1: number) => {
+    const blocked = blockedWords(page);
+    if (blocked.has(w0)) return null;
+    const dir = w1 >= w0 ? 1 : -1;
+    let end = w0;
+    let endC = c1;
+    for (let i = w0; dir > 0 ? i <= w1 : i >= w1; i += dir) {
+      if (blocked.has(i)) {
+        endC = dir > 0 ? Infinity : 0;
+        break;
+      }
+      end = i;
+      endC = i === w1 ? c1 : dir > 0 ? Infinity : 0;
+    }
+    return { a: { w: w0, c: c0 }, b: { w: end, c: endC } };
+  };
+  const makeHighlight = (sel: { page: number; w0: number; w1: number; c0?: number; c1?: number; x0: number; y0: number; x1: number; y1: number }, color: HighlightColor) => {
     const words = texts.get(sel.page)?.words;
-    if (words && sel.w0 >= 0) return p.onHighlights!(addWordRange(highlights, sel.page, sel.w0, sel.w1, uid('h'), color));
+    if (words && sel.w0 >= 0) {
+      const r = clampSel(sel.page, sel.w0, sel.c0 ?? 0, sel.w1, sel.c1 ?? Infinity);
+      if (!r) return;
+      // a drag left-to-right starts at its first character; right-to-left the other way round
+      return p.onHighlights!(addWordRange(highlights, sel.page, r.a, r.b, uid('h'), color, words));
+    }
     const b = boxFromDrag(sel.page, sel.x0, sel.y0, sel.x1, sel.y1, uid('h'), color);
     if (b) p.onHighlights!([...highlights, b]);
   };
@@ -167,7 +205,8 @@ export function QuestionView(p: QuestionViewProps) {
       const words = texts.get(seg.page)?.words;
       const ch = choiceAt(seg.page, pt.x, pt.y);
       const w = words ? wordAt(words, pt.x, pt.y) : -1;
-      const d: Drag = { seg: segIndex, page: seg.page, x0: pt.x, y0: pt.y, cx: e.clientX, cy: e.clientY, x1: pt.x, y1: pt.y, moved: false, w0: w, w1: w, choice: ch?.letter ?? null, longDone: false };
+      const c = w >= 0 && words ? charAt(words[w], pt.x) : 0;
+      const d: Drag = { seg: segIndex, page: seg.page, x0: pt.x, y0: pt.y, cx: e.clientX, cy: e.clientY, x1: pt.x, y1: pt.y, moved: false, w0: w, w1: w, c0: c, c1: c, choice: ch?.letter ?? null, longDone: false };
       setD(d);
       if (e.pointerType === 'mouse') (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
       clearLong();
@@ -190,15 +229,20 @@ export function QuestionView(p: QuestionViewProps) {
       if (!a) return;
       if (!d.moved && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 5) return;
       clearLong();
-      if (!canMark) return setD({ ...d, moved: true });
+      // a drag that starts on an answer choice never highlights
+      if (!canMark || d.choice) return setD({ ...d, moved: true });
       const pt = a.toPage(e.clientX, e.clientY);
       const words = texts.get(seg.page)?.words;
       let w1 = d.w1;
+      let c1 = d.c1;
       if (words && d.w0 >= 0) {
         const w = wordAt(words, pt.x, pt.y, 0.05);
-        if (w >= 0) w1 = w;
+        if (w >= 0) {
+          w1 = w;
+          c1 = charAt(words[w], pt.x);
+        }
       }
-      setD({ ...d, moved: true, x1: pt.x, y1: pt.y, w1 });
+      setD({ ...d, moved: true, x1: pt.x, y1: pt.y, w1, c1 });
     },
     onPointerUp: () => {
       const d = dragRef.current;
@@ -207,11 +251,11 @@ export function QuestionView(p: QuestionViewProps) {
       if (!d || d.seg !== segIndex || d.longDone) return;
       const words = texts.get(seg.page)?.words;
       if (d.moved) {
-        if (!canMark) return;
+        if (!canMark || d.choice) return;
         if (display.highlightMode === 'manual') {
           // keep the selection and ask for a color next to where the drag ended
           const box = rootRef.current?.getBoundingClientRect() ?? null;
-          setPending({ seg: segIndex, page: d.page, w0: d.w0, w1: d.w1, x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, px: lastPt.current.x - (box?.left ?? 0), py: lastPt.current.y - (box?.top ?? 0) });
+          setPending({ seg: segIndex, page: d.page, w0: d.w0, w1: d.w1, c0: d.c0, c1: d.c1, x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, px: lastPt.current.x - (box?.left ?? 0), py: lastPt.current.y - (box?.top ?? 0) });
           return;
         }
         makeHighlight(d, display.highlightColor);
@@ -227,6 +271,22 @@ export function QuestionView(p: QuestionViewProps) {
     onPointerCancel: () => {
       clearLong();
       setD(null);
+    },
+    onDoubleClick: (e) => {
+      // double-click a word to highlight it (not on answer choices)
+      const a = api();
+      const words = texts.get(seg.page)?.words;
+      if (!a || !words || !canMark) return;
+      const pt = a.toPage(e.clientX, e.clientY);
+      if (choiceAt(seg.page, pt.x, pt.y)) return;
+      const w = wordAt(words, pt.x, pt.y, 0.004);
+      if (w < 0 || blockedWords(seg.page).has(w)) return;
+      if (display.highlightMode === 'manual') {
+        const box = rootRef.current?.getBoundingClientRect() ?? null;
+        setPending({ seg: segIndex, page: seg.page, w0: w, w1: w, x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y, px: e.clientX - (box?.left ?? 0), py: e.clientY - (box?.top ?? 0) });
+        return;
+      }
+      p.onHighlights!(addWordRange(highlights, seg.page, w, w, uid('h'), display.highlightColor, words));
     },
     onContextMenu: (e) => {
       const a = api();
@@ -261,12 +321,17 @@ export function QuestionView(p: QuestionViewProps) {
             {(api) => {
               apiRef = api;
               const words = text?.words;
-              const rectsOf = (h: Highlight): Rect[] => (h.kind === 'box' ? [h] : words ? rectsForRange(words, h.start, h.end) : []);
+              const rectsOf = (h: Highlight): Rect[] => (h.kind === 'box' ? [h] : words ? rectsForRange(words, h.start, h.end, h.sc, h.ec) : []);
               const sel = drag && drag.seg === i && drag.moved ? drag : pending && pending.seg === i ? { ...pending, moved: true } : null;
               const live: Rect[] =
                 sel && canMark
                   ? words && sel.w0 >= 0
-                    ? rectsForRange(words, Math.min(sel.w0, sel.w1), Math.max(sel.w0, sel.w1))
+                    ? (() => {
+                        const r = clampSel(seg.page, sel.w0, sel.c0 ?? 0, sel.w1, sel.c1 ?? Infinity);
+                        if (!r) return [];
+                        const [x0, x1] = r.a.w < r.b.w || (r.a.w === r.b.w && r.a.c <= r.b.c) ? [r.a, r.b] : [r.b, r.a];
+                        return rectsForRange(words, x0.w, x1.w, x0.c || undefined, x1.c === Infinity ? undefined : Math.max(x1.c, x0.w === x1.w ? x0.c + 1 : 1));
+                      })()
                     : [{ x: Math.min(sel.x0, sel.x1), y: Math.min(sel.y0, sel.y1), w: Math.abs(sel.x1 - sel.x0), h: Math.abs(sel.y1 - sel.y0) }]
                   : [];
               return (
@@ -339,7 +404,8 @@ function ChoiceOverlay({ c, api, selected, struck, reveal, interactive, strikeX,
   // radio: on top of the page's own circle when there is one, otherwise just left of the label
   let radio: { left: string; top: string; size: number };
   if (c.radio) {
-    const size = Math.max(10, Math.min(26, c.radio.h * pxPerY * 1.15, c.radio.w * pxPerX * 1.15));
+    // exactly over the page's own circle: same centre, just large enough to cover its ring
+    const size = Math.max(10, Math.min(44, Math.max(c.radio.h * pxPerY, c.radio.w * pxPerX) + 2));
     radio = {
       left: `calc(${((c.radio.x + c.radio.w / 2 - api.crop.x) / api.crop.w) * 100}% - ${size / 2}px)`,
       top: `calc(${((c.radio.y + c.radio.h / 2 - api.crop.y) / api.crop.h) * 100}% - ${size / 2}px)`,

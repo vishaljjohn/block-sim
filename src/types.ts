@@ -31,6 +31,8 @@ export interface Question {
   choiceSource?: 'auto' | 'manual';
   /** user asked for bubbles on this question even though choices were detected */
   forceBubbles?: boolean;
+  /** the user drew this question's area by hand: automatic adjustments leave it alone */
+  areaManual?: boolean;
   /** 0–1; below 0.6 is shown as a low-confidence warning on the key check screen */
   keyConfidence?: number;
   /** text of each detected choice (used to resolve keys that give the answer as text) */
@@ -77,6 +79,12 @@ export interface PageText {
   words: Word[];
   autoCrop: Rect | null;
   conf: number;
+  /** vertical bands (page fractions) that contain ink inside the crop: text or pictures */
+  ink?: [number, number][];
+  /** the page's own radio-button circles, found from the pixels */
+  radios?: Rect[];
+  /** processing version: pages processed by an older version get the newer extras in the background */
+  v?: number;
 }
 
 export type Mode = 'exam' | 'tutor' | 'untimed';
@@ -96,7 +104,8 @@ export type HighlightColor = 'yellow' | 'pink' | 'green' | 'blue' | 'purple';
 /** color is optional: highlights saved before colors existed are yellow */
 export type Highlight =
   | { id: string; kind: 'box'; page: number; x: number; y: number; w: number; h: number; color?: HighlightColor }
-  | { id: string; kind: 'words'; page: number; start: number; end: number; color?: HighlightColor };
+  /** sc/ec: character offsets inside the first/last word (partial words, e.g. just the "%" of "43%") */
+  | { id: string; kind: 'words'; page: number; start: number; end: number; sc?: number; ec?: number; color?: HighlightColor };
 
 export interface Display {
   theme: 'light' | 'dark';

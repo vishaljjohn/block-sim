@@ -10,8 +10,11 @@ import { resolveAnswerText } from './keyParser';
 import { blankQuestion, fixedLayout, type HighlightReader, type WordsProvider } from './importer';
 import { examPdf, hasRealText, pageHasImage, pageWords, renderToCanvas, type PdfDoc } from './pdf';
 import { mergeWords } from './pdfWords';
-import { detectCrop, highlightedChoice } from './crop';
-import { detectChoices, detectLayout, linesForSegment, pageLines, readingOrder, type PageLines } from './detect';
+import { detectCrop, findRadios, highlightedChoice, inkBands } from './crop';
+
+/** bump when page processing gains new results; older cached pages are upgraded in the background */
+export const PAGE_VERSION = 2;
+import { coverInk, detectChoices, detectLayout, linesForSegment, matchChoiceLabel, pageLines, readingOrder, type PageLines } from './detect';
 import { ocrCanvas } from './ocr';
 import { saveExam, savePageTexts } from './store';
 import { logError } from './errorLog';
@@ -110,14 +113,36 @@ async function finish(examId: string | null, doc: PdfDoc, page: number, input: W
   let words = input;
   words = readingOrder(words);
   let autoCrop: Rect | null = null;
+  let ink: [number, number][] | undefined;
+  let radios: Rect[] | undefined;
   if (examId) {
     try {
-      autoCrop = detectCrop(await cropPixels(doc, page), words);
+      const px = await cropPixels(doc, page);
+      autoCrop = detectCrop(px, words);
+      ink = inkBands(px, autoCrop);
+      radios = await radiosFor(doc, page, words);
     } catch (e) {
       logError('crop', e);
     }
   }
-  return { id: `${examId ?? 'tmp'}:${page}`, examId: examId ?? 'tmp', page, source, words, autoCrop, conf };
+  return { id: `${examId ?? 'tmp'}:${page}`, examId: examId ?? 'tmp', page, source, words, autoCrop, conf, ...(ink ? { ink } : {}), ...(radios?.length ? { radios } : {}), v: PAGE_VERSION };
+}
+
+/** The page's own radio circles next to choice labels, measured on a sharper render. */
+async function radiosFor(doc: PdfDoc, page: number, words: Word[]): Promise<Rect[]> {
+  const lines = pageLines(page, words).lines.filter((l) => matchChoiceLabel(l.text));
+  if (lines.length < 2) return [];
+  const pg = await doc.getPage(page);
+  const c = await renderToCanvas(pg, 1600);
+  const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+  c.width = c.height = 1;
+  // label position: the first word that is the letter itself (skip an OCR'd radio glyph)
+  const labels = lines.map((l) => {
+    const first = words[l.idx[0]];
+    const lab = l.idx.length > 1 && /^[O0oQ©®○◯●◉◎@¤]$/.test(first.t) ? words[l.idx[1]] : first;
+    return { x: lab.x, y: lab.y, h: lab.h };
+  });
+  return findRadios({ data: img.data, width: img.width, height: img.height }, labels).filter((r): r is Rect => !!r);
 }
 
 /** Key pages that mark the answer with a highlight: find the choices, then the one with color behind it. */
@@ -221,6 +246,7 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
     }
   }
   if (!questions.length) questions = fixedLayout(exam.id, { pagesPerQuestion: 1, startPage: opts.startPage, endPage: opts.endPage, skip: opts.skip });
+  coverInk(questions, [...texts.values()]);
   questions = applyChoices({ ...exam, questions }, texts);
   const allDone = pages.every((p) => texts.has(p));
   return { questions, examPatch: { textStatus: allDone ? 'done' : 'partial' }, inlineKey };
@@ -267,7 +293,7 @@ function choicesFor(exam: Exam, q: Question, texts: Map<number, PageText>) {
     const pl = toPageLines(pt);
     const region = segmentRect(exam, seg, pt);
     const lines = linesForSegment(pl, region);
-    const d = detectChoices(lines, seg.page, region, pl.words);
+    const d = detectChoices(lines, seg.page, region, pl.words, pt.radios);
     if (d.choices.length >= 2) return d;
   }
   return { choices: [], texts: [], confidence: 0 };
@@ -285,7 +311,8 @@ export function resumeBackgroundText(examId?: string): void {
   void (async () => {
     try {
       if (!examId && !queue.length) {
-        for (const e of await db.exams.toArray()) if (e.textStatus !== 'done' && !queue.includes(e.id)) queue.push(e.id);
+        const stale = new Set((await db.pages.toArray()).filter((p) => (p.v ?? 1) < PAGE_VERSION).map((p) => p.examId));
+        for (const e of await db.exams.toArray()) if ((e.textStatus !== 'done' || stale.has(e.id)) && !queue.includes(e.id)) queue.push(e.id);
       }
       while (queue.length) {
         const id = queue.shift()!;
@@ -299,17 +326,37 @@ export function resumeBackgroundText(examId?: string): void {
 
 async function processExamText(examId: string) {
   let exam = await db.exams.get(examId);
-  if (!exam || exam.textStatus === 'done') return;
+  if (!exam) return;
+  const stale = (await db.pages.where('examId').equals(examId).toArray()).some((p) => (p.v ?? 1) < PAGE_VERSION);
+  if (exam.textStatus === 'done' && !stale) return;
   const doc = await examPdf(examId);
   const pages = [...new Set(exam.questions.flatMap((q) => q.segments.map((s) => s.page)))].sort((a, b) => a - b);
-  const have = new Set((await db.pages.where('examId').equals(examId).toArray()).map((p) => p.page));
+  const cached = await db.pages.where('examId').equals(examId).toArray();
+  const have = new Set(cached.map((p) => p.page));
   const todo = pages.filter((p) => !have.has(p));
+  // pages read by an older version: add the newer extras (ink map, radio circles) without reading them again
+  for (const pt of cached.filter((x) => (x.v ?? 1) < PAGE_VERSION && pages.includes(x.page))) {
+    try {
+      const pg = await doc.getPage(pt.page);
+      const c = await renderToCanvas(pg, 600);
+      const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+      c.width = c.height = 1;
+      const px = { data: img.data, width: img.width, height: img.height };
+      const crop = pt.autoCrop ?? detectCrop(px, pt.words);
+      await savePageTexts(examId, [{ ...pt, autoCrop: crop, ink: inkBands(px, crop), radios: await radiosFor(doc, pt.page, pt.words), v: PAGE_VERSION }]);
+    } catch (e) {
+      logError('upgrade page ' + pt.page, e);
+    }
+  }
   let lastSave = Date.now();
   const refresh = async () => {
     exam = await db.exams.get(examId);
     if (!exam) return;
     const texts = new Map((await db.pages.where('examId').equals(examId).toArray()).map((p) => [p.page, p]));
-    const questions = applyChoices(exam, texts);
+    // never drop visible content (pictures above a question, etc.); only ever grows question areas
+    const grown = exam.questions.map((q) => ({ ...q, segments: q.segments.map((s) => ({ ...s, ...(s.rect ? { rect: { ...s.rect } } : {}) })) }));
+    coverInk(grown, [...texts.values()]);
+    const questions = applyChoices({ ...exam, questions: grown }, texts);
     const done = pages.every((p) => texts.has(p));
     if (JSON.stringify(questions) !== JSON.stringify(exam.questions) || done !== (exam.textStatus === 'done')) {
       await saveExam({ ...exam, questions, textStatus: done ? 'done' : 'partial' });
@@ -347,5 +394,6 @@ export async function redetectLayout(exam: Exam, inlineAnswers = false): Promise
     q.segments = d.segments.map((s) => ({ page: s.page, ...(s.rect ? { rect: s.rect } : {}) }));
     return q;
   });
+  coverInk(qs, texts);
   return applyChoices({ ...exam, questions: qs }, new Map(texts.map((t) => [t.page, t])));
 }
