@@ -4,7 +4,6 @@ import { APP_VERSION, BUG_REPORT_URL, IS_BETA } from '../config';
 const NAV = [
   { href: '#/', label: 'Library', match: (p: string) => p === '/' || p.startsWith('/exam') || p.startsWith('/import') || p.startsWith('/setup') || p.startsWith('/report') },
   { href: '#/missed', label: 'Missed Questions', match: (p: string) => p.startsWith('/missed') || p.startsWith('/redo') },
-  { href: '#/weak', label: 'Weak Areas', match: (p: string) => p.startsWith('/weak') },
   { href: '#/settings', label: 'Settings', match: (p: string) => p.startsWith('/settings') },
   { href: '#/faq', label: 'Help', match: (p: string) => p.startsWith('/faq') },
 ];

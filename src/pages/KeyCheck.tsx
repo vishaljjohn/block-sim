@@ -137,7 +137,6 @@ export function KeyCheck({ examId }: { examId: string }) {
                 <th className="th w-16">Answer</th>
                 <th className="th w-16">Choices</th>
                 <th className="th w-20">Pages</th>
-                <th className="th w-36">Tags</th>
                 <th className="th">Explanation</th>
               </tr>
             </thead>
@@ -174,9 +173,6 @@ export function KeyCheck({ examId }: { examId: string }) {
                       )}
                     </td>
                     <td className="td">
-                      <input className="field w-32" defaultValue={x.tags.join(', ')} key={x.tags.join(',')} placeholder="e.g. Cardio" aria-label={`Tags for question ${x.number}`} data-testid={`key-tags-${x.number}`} onBlur={(e) => { const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean); if (tags.join(',') !== x.tags.join(',')) patchQ(i, { tags }); }} />
-                    </td>
-                    <td className="td">
                       <textarea className="field h-[30px] w-full min-w-[180px] text-xs focus:h-40" value={x.explanation} aria-label={`Explanation for question ${x.number}`} data-testid={`key-expl-${x.number}`} onChange={(e) => patchQ(i, { explanation: e.target.value })} />
                     </td>
                   </tr>
@@ -190,9 +186,6 @@ export function KeyCheck({ examId }: { examId: string }) {
             </button>
             <button className="btn" disabled={exam.questions.length < 2} onClick={() => { if (window.confirm(`Remove question ${q.number} from this exam? Later questions are renumbered.`)) { setExam({ ...exam, questions: renumber(exam.questions.filter((_, k) => k !== focus)) }); setFocus(Math.max(0, focus - 1)); setDirty(true); } }}>
               Remove question {q?.number}
-            </button>
-            <button className="btn" onClick={() => { const t = window.prompt('Tag to add to every question that has no tags (for example the subject):', exam.subject); if (t && t.trim()) { setExam({ ...exam, questions: exam.questions.map((x) => (x.tags.length ? x : { ...x, tags: [t.trim()] })) }); setDirty(true); } }}>
-              Tag all untagged…
             </button>
           </div>
         </div>

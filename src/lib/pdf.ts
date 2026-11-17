@@ -37,8 +37,18 @@ export function examPdf(examId: string): Promise<PdfDoc> {
   let p = docCache.get(examId);
   if (!p) {
     p = (async () => {
-      const row = await db.blobs.get(examId);
-      if (!row) throw new Error('The PDF for this exam is missing from storage.');
+      let row = await db.blobs.get(examId);
+      if (!row) {
+        // imported from the data folder's parent: read it from where it is
+        const exam = await db.exams.get(examId);
+        const { readFromBase } = await import('./folder');
+        const data = exam?.sourcePath ? await readFromBase(exam.sourcePath) : null;
+        if (data) {
+          await db.blobs.put({ id: examId, data });
+          row = { id: examId, data };
+        }
+      }
+      if (!row) throw new Error('The PDF for this exam is missing. Reconnect your Test Simulator folder (Settings), or import the PDF again.');
       return openPdf(row.data);
     })();
     docCache.set(examId, p);

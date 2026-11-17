@@ -212,3 +212,23 @@ describe('keys without question numbers', () => {
 it('"Right answer is A" lines', () => {
   expect(answers('Right answer is A\nbecause.\nRight answer is C\nmore.')).toBe('1A 2C');
 });
+
+describe('folder import pairing', () => {
+  it('pairs "5 Q.pdf" with "5A.pdf" per folder and names folders without their order number', async () => {
+    const { pairFiles, categoryName, parseName } = await import('../../src/lib/folderImport');
+    expect(categoryName('2 Surgery')).toBe('Surgery');
+    expect(categoryName('1 Internal Medicine')).toBe('Internal Medicine');
+    expect(parseName('5A.pdf')).toMatchObject({ num: '5', isAnswer: true });
+    expect(parseName('10 Q.pdf')).toMatchObject({ num: '10', isAnswer: false });
+    expect(parseName('Form 3 answers.pdf')).toMatchObject({ num: '3', isAnswer: true });
+    expect(parseName('Form 3.pdf')).toMatchObject({ num: '3', isAnswer: false });
+    const f = (path: string) => ({ path, name: path.split('/').pop()!, folder: path.split('/').slice(0, -1).join('/'), file: async () => new File([], 'x') });
+    const pairs = pairFiles([f('2 Surgery/5 Q.pdf'), f('2 Surgery/5A.pdf'), f('2 Surgery/10 Q.pdf'), f('2 Surgery/10A.pdf'), f('2 Surgery/9 Q.pdf'), f('3 OBGYN/1 Q.pdf'), f('3 OBGYN/1A.pdf'), f('3 OBGYN/.DS_Store'), f('3 OBGYN/notes.txt')]);
+    expect(pairs.map((p) => `${p.category}|${p.name}|${p.question.name}|${p.answer?.name ?? '-'}`)).toEqual([
+      'Surgery|Surgery 5|5 Q.pdf|5A.pdf',
+      'Surgery|Surgery 9|9 Q.pdf|-',
+      'Surgery|Surgery 10|10 Q.pdf|10A.pdf',
+      'OBGYN|OBGYN 1|1 Q.pdf|1A.pdf',
+    ]);
+  });
+});

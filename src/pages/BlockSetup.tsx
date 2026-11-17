@@ -9,7 +9,7 @@ import { fmtDuration } from '../lib/timer';
 import { go, useLive } from '../ui/hooks';
 import { H1, H2 } from '../ui/Shell';
 
-type Sel = 'all' | 'range' | 'random' | 'missed' | 'marked' | 'tag';
+type Sel = 'all' | 'range' | 'random' | 'missed' | 'marked';
 type Preset = 'standard' | 'shelf' | 'custom';
 export const BANK_KEY = STORAGE_PREFIX + 'bank-qids';
 
@@ -21,13 +21,11 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(0);
   const [randomN, setRandomN] = useState(40);
-  const [tags, setTags] = useState<string[]>([]);
   const [order, setOrder] = useState<'sequential' | 'random'>('sequential');
   const [mode, setMode] = useState<Mode>(bank ? 'tutor' : 'exam');
   const [preset, setPreset] = useState<Preset>('custom');
   const [secPerQ, setSecPerQ] = useState(DEFAULT_SEC_PER_Q);
   const [blocks, setBlocks] = useState(1);
-  const [confidence, setConfidence] = useState(false);
   const [breakMin, setBreakMin] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -48,7 +46,6 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   if (!exams || !attempts || !reviews) return <div className="text-sm">Loading…</div>;
   if (!bank && !exam) return <div>This exam was not found. <a className="link" href="#/">Back to the library</a></div>;
 
-  const allTags = exam ? [...new Set(exam.questions.flatMap((q) => q.tags))].sort() : [];
   const missedIds = new Set(rows.filter((r) => r.why.includes('wrong') && r.schedule.status !== 'Mastered').map((r) => r.qid));
   const markedIds = new Set(rows.filter((r) => r.why.includes('marked')).map((r) => r.qid));
 
@@ -64,7 +61,6 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     else if (sel === 'range') pool = all.filter((p) => p.q.number >= from && p.q.number <= to);
     else if (sel === 'missed') pool = all.filter((p) => missedIds.has(p.q.id));
     else if (sel === 'marked') pool = all.filter((p) => markedIds.has(p.q.id));
-    else if (sel === 'tag') pool = all.filter((p) => p.q.tags.some((t) => tags.includes(t)));
   }
   const presetCount = preset === 'standard' ? 40 : preset === 'shelf' ? 110 : null;
   const wanted = sel === 'random' && !bank ? randomN : presetCount;
@@ -97,7 +93,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       name,
       picks,
       mode,
-      { secPerQ: mode === 'exam' ? sec : null, confidence, preset, order, selection: bank ? 'bank' : sel, breakMinutes: breakMin.trim() ? Math.max(0, parseFloat(breakMin)) : null },
+      { secPerQ: mode === 'exam' ? sec : null, confidence: false, preset, order, selection: bank ? 'bank' : sel, breakMinutes: breakMin.trim() ? Math.max(0, parseFloat(breakMin)) : null },
       plan,
     );
     await saveAttempt(a);
@@ -133,17 +129,6 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
             </>)}
             {R('missed', 'sel-missed', <>Missed only ({exam!.questions.filter((q) => missedIds.has(q.id)).length})</>)}
             {R('marked', 'sel-marked', <>Marked only ({exam!.questions.filter((q) => markedIds.has(q.id)).length})</>)}
-            {allTags.length > 0 &&
-              R('tag', 'sel-tag', <>
-                By tag:
-                <span className="ml-1 inline-flex flex-wrap gap-1">
-                  {allTags.map((t) => (
-                    <button key={t} type="button" className="border border-gray-500 px-1.5 text-xs" style={{ background: tags.includes(t) ? '#1c4973' : '#f3f3f3', color: tags.includes(t) ? '#fff' : '#000' }} aria-pressed={tags.includes(t)} onClick={() => { setSel('tag'); setTags(tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t]); }}>
-                      {t}
-                    </button>
-                  ))}
-                </span>
-              </>)}
           </div>
         </>
       )}
@@ -177,7 +162,6 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
             <input className="field mx-1 w-16" type="number" min={0} value={breakMin} onChange={(e) => setBreakMin(e.target.value)} placeholder="none" data-testid="break-min" /> minutes per break
           </label>
         )}
-        <label className="block pt-1"><input type="checkbox" checked={confidence} onChange={(e) => setConfidence(e.target.checked)} data-testid="opt-confidence" /> Ask how confident I am on each answer (sure / unsure / guess)</label>
       </div>
 
       <div className="mt-5 border border-gray-400 bg-gray-50 p-3 text-sm" data-testid="setup-summary">

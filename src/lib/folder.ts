@@ -11,7 +11,7 @@ import { mergeIntoDb, manifest, paths, type FileSet } from './backup';
 import { mergeReviews, mergeTombstones, type Tombstone } from './merge';
 import { getTombstones, onWrite, type WriteEvent } from './store';
 import { logError } from './errorLog';
-import { SNAPSHOT_KEEP } from '../config';
+import { IS_BETA, SNAPSHOT_KEEP } from '../config';
 
 export interface FolderStatus {
   supported: boolean;
@@ -41,6 +41,24 @@ export function onFolderStatus(fn: () => void): () => void {
 }
 
 let root: FileSystemDirectoryHandle | null = null;
+/** the folder the user picked when the data lives in a subfolder next to their PDFs (exam PDFs are read from here) */
+let base: FileSystemDirectoryHandle | null = null;
+export const DATA_DIR = IS_BETA ? 'Test Simulator Data (beta)' : 'Test Simulator Data';
+
+/** Read a file by its path inside the picked folder ("2 Surgery/5 Q.pdf"). */
+export async function readFromBase(path: string): Promise<ArrayBuffer | null> {
+  if (!base) return null;
+  try {
+    const parts = path.split('/');
+    const name = parts.pop()!;
+    let dir = base;
+    for (const p of parts) dir = await dir.getDirectoryHandle(p);
+    return await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+const pdfInPlace = async (examId: string) => !!base && !!(await db.exams.get(examId))?.sourcePath;
 
 // ---------------------------------------------------------------- file helpers
 async function dirFor(path: string, create: boolean): Promise<{ dir: FileSystemDirectoryHandle; name: string }> {
@@ -160,7 +178,7 @@ export async function syncNow(): Promise<void> {
     // PDFs and text caches are large: only read the ones this device does not have yet
     for (const e of await db.exams.toArray()) {
       if (!(await db.blobs.get(e.id))) {
-        const pdf = await readBinary(paths.pdf(e.id));
+        const pdf = (e.sourcePath ? await readFromBase(e.sourcePath) : null) ?? (await readBinary(paths.pdf(e.id)));
         if (pdf) await db.blobs.put({ id: e.id, data: pdf });
       }
       if ((await db.pages.where('examId').equals(e.id).count()) === 0) {
@@ -180,7 +198,7 @@ export async function syncNow(): Promise<void> {
     const dead = new Set(tombs.map((t) => t.id));
     for (const e of await db.exams.toArray()) {
       if ((folderStamp.get(e.id) ?? -1) < e.updatedAt) await writeFile(paths.exam(e.id), json(e));
-      if (!(await readBinary(paths.pdf(e.id)).then((b) => !!b))) {
+      if (!(e.sourcePath && base) && !(await readBinary(paths.pdf(e.id)).then((b) => !!b))) {
         const b = await db.blobs.get(e.id);
         if (b) await writeFile(paths.pdf(e.id), new Blob([b.data], { type: 'application/pdf' }));
       }
@@ -278,6 +296,8 @@ export function flush(): Promise<void> {
             break;
           }
           case 'pdf': {
+            // a PDF imported from the picked folder stays where it is: no second copy
+            if (await pdfInPlace(e.id)) break;
             const b = await db.blobs.get(e.id);
             if (b) await writeFile(paths.pdf(e.id), new Blob([b.data], { type: 'application/pdf' }));
             break;
@@ -342,9 +362,10 @@ async function writeSnapshots() {
 // ---------------------------------------------------------------- lifecycle
 let unhook: (() => void) | null = null;
 
-async function connect(h: FileSystemDirectoryHandle): Promise<void> {
+async function connect(h: FileSystemDirectoryHandle, b: FileSystemDirectoryHandle | null = null): Promise<void> {
   root = h;
-  setStatus({ connected: true, needsPermission: false, name: h.name, error: null });
+  base = b;
+  setStatus({ connected: true, needsPermission: false, name: b ? `${b.name}/${h.name}` : h.name, error: null });
   unhook?.();
   unhook = onWrite(queue);
   await syncNow();
@@ -358,13 +379,15 @@ export async function initFolderSync(): Promise<void> {
     if (document.hidden) void flush();
   });
   const h = await getMeta<FileSystemDirectoryHandle | null>('folderHandle', null);
+  const b = await getMeta<FileSystemDirectoryHandle | null>('folderBase', null);
   if (!h) return;
-  setStatus({ name: h.name });
-  if (await permission(h, false)) {
+  setStatus({ name: b ? `${b.name}/${h.name}` : h.name });
+  if (await permission(b ?? h, false)) {
     // never block the app on a slow (cloud) folder
-    void connect(h);
+    void connect(h, b);
   } else {
     root = h;
+    base = b;
     setStatus({ needsPermission: true, connected: false });
     unhook?.();
     unhook = onWrite(queue); // collect writes; they go out after reconnecting
@@ -374,32 +397,50 @@ export async function initFolderSync(): Promise<void> {
 /** One click: re-grant permission after a browser restart. */
 export async function reconnectFolder(): Promise<boolean> {
   const h = await getMeta<FileSystemDirectoryHandle | null>('folderHandle', null);
+  const b = await getMeta<FileSystemDirectoryHandle | null>('folderBase', null);
   if (!h) return false;
-  if (!(await permission(h, true))) {
+  if (!(await permission(b ?? h, true))) {
     setStatus({ error: 'Permission was not granted.' });
     return false;
   }
-  await connect(h);
+  await connect(h, b);
   await flush();
   return true;
 }
 
-/** Pick (or change) the data folder. Existing data on both sides is merged. */
-export async function chooseFolder(): Promise<boolean> {
-  if (!folderSupported()) return false;
-  let h: FileSystemDirectoryHandle;
+export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null> {
   try {
-    h = await (window as unknown as { showDirectoryPicker: (o: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ id: 'block-sim-data', mode: 'readwrite', startIn: 'documents' });
+    return await (window as unknown as { showDirectoryPicker: (o: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ id: 'test-simulator-folder', mode: 'readwrite', startIn: 'documents' });
   } catch {
-    return false; // cancelled
+    return null; // cancelled
   }
+}
+
+/**
+ * Pick (or change) the data folder. The app keeps its data in a "Test Simulator Data" subfolder of the folder you
+ * pick (ideally the same folder as your exam PDFs). Picking an existing data folder directly also works.
+ * Existing data on both sides is merged.
+ */
+export async function chooseFolder(picked?: FileSystemDirectoryHandle): Promise<boolean> {
+  if (!folderSupported()) return false;
+  const h = picked ?? (await pickDirectory());
+  if (!h) return false;
   if (!(await permission(h, true))) {
-    setStatus({ error: 'Block Sim needs permission to save in that folder.' });
+    setStatus({ error: 'Test Simulator needs permission to save in that folder.' });
     return false;
   }
+  // the picked folder is itself a data folder (older setups): use it as is
+  let isData = h.name === DATA_DIR;
+  try {
+    await h.getFileHandle('manifest.json');
+    isData = true;
+  } catch {}
+  const data = isData ? h : await h.getDirectoryHandle(DATA_DIR, { create: true });
+  const b = isData ? null : h;
   await flush();
-  await setMeta('folderHandle', h);
-  await connect(h);
+  await setMeta('folderHandle', data);
+  await setMeta('folderBase', b);
+  await connect(data, b);
   return true;
 }
 
@@ -408,7 +449,9 @@ export async function disconnectFolder(): Promise<void> {
   unhook?.();
   unhook = null;
   root = null;
+  base = null;
   pending.clear();
   await setMeta('folderHandle', null);
+  await setMeta('folderBase', null);
   setStatus({ connected: false, needsPermission: false, name: null, lastSyncAt: null, error: null });
 }

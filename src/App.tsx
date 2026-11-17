@@ -19,7 +19,6 @@ import { TestScreen } from './pages/TestScreen';
 import { Report } from './pages/Report';
 import { Missed } from './pages/Missed';
 import { Redo } from './pages/Redo';
-import { WeakAreas } from './pages/WeakAreas';
 import { SettingsPage } from './pages/Settings';
 import { Faq } from './pages/Faq';
 import { Welcome } from './pages/Welcome';
@@ -135,7 +134,7 @@ export function App() {
   else if (p0 === 'missed') {
     screen = <Missed />;
     wide = true;
-  } else if (p0 === 'weak') screen = <WeakAreas />;
+  }
   else if (p0 === 'settings') screen = <SettingsPage />;
   else if (p0 === 'faq') screen = <Faq />;
   else screen = <Home />;

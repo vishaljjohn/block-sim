@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Exam } from '../types';
-import { applyKey, fixedLayout, formatPageList, newExam, parsePageList, readKeyFromPdf, readKeyFromText } from '../lib/importer';
-import { analyzeExam, highlightReader, resumeBackgroundText, wordsProvider } from '../lib/analyze';
-import { closePdf, openPdf, type PdfDoc } from '../lib/pdf';
-import { saveExam, savePdf } from '../lib/store';
-import type { ParsedKey } from '../lib/keyParser';
-import { go } from '../ui/hooks';
+import { fixedLayout, formatPageList, parsePageList, readKeyFromText } from '../lib/importer';
+import { openPdf, type PdfDoc } from '../lib/pdf';
+import { importExam, type KeySource } from '../lib/importRun';
+import { db } from '../db';
+import { go, useLive } from '../ui/hooks';
 import { H1, H2 } from '../ui/Shell';
-
-type KeySource = 'pdf' | 'same' | 'inline' | 'paste' | 'none';
+import { FolderImport } from './FolderImport';
 
 export function ImportPage() {
+  const [mode, setMode] = useState<'one' | 'folder'>(() => (window.location.hash.includes('folder=1') ? 'folder' : 'one'));
+  const cats = useLive(async () => [...new Set((await db.exams.toArray()).map((e) => e.subject).filter(Boolean))].sort(), []);
   const [file, setFile] = useState<File | null>(null);
   const [buf, setBuf] = useState<ArrayBuffer | null>(null);
   const [doc, setDoc] = useState<PdfDoc | null>(null);
@@ -64,67 +63,56 @@ export function ImportPage() {
     if (!doc || !buf || !file) return;
     setErr('');
     try {
-      setBusy('Saving the PDF on this device…');
-      const exam: Exam = newExam(name.trim() || file.name, subject.trim(), pageCount);
-      exam.questions = fixedLayout(exam.id, { pagesPerQuestion: per, startPage: start, endPage, skip: skipList });
-      if (!exam.questions.length) throw new Error('No question pages are left with these settings.');
-      await savePdf(exam.id, buf);
-      await saveExam(exam);
-
-      let key: ParsedKey | null = null;
-      let note = '';
-      const provider = wordsProvider(exam.id);
-      if (source === 'paste') key = readKeyFromText(paste);
-      else if (source === 'pdf' && keyFile) {
-        setBusy('Reading the answer key PDF…');
-        const kd = await openPdf(await keyFile.arrayBuffer());
-        const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the answer key: page ${d} of ${t}…`), highlightReader);
-        key = r.key;
-        if (r.pagesWithText === 0) note = 'The answer key PDF has no readable text.';
-        closePdf(kd);
-      } else if (source === 'same' && keyStartN >= 1) {
-        setBusy('Reading the answer key pages…');
-        const r = await readKeyFromPdf(doc, keyStartN, pageCount, provider, (d, t) => setBusy(`Reading the answer key: page ${d} of ${t}…`), highlightReader);
-        key = r.key;
-      }
-
-      // find question numbers, choices and (for "answer after each question") inline answers
-      setBusy('Looking at the question pages…');
       cancelRef.current = { cancelled: false };
-      // the key's highest question number says how many questions there are, even when some answers were unreadable
-      // (only when most of the key was actually read: a half-unreadable key must not dictate the layout)
-      const maxN = key && key.entries.length ? Math.max(...key.entries.map((e) => e.n)) : 0;
-      const readable = key ? key.entries.filter((e) => e.answer || e.answerText).length : 0;
-      const expectedCount = maxN >= 2 && readable >= maxN * 0.6 ? maxN : undefined;
-      const analyzed = await analyzeExam(exam, doc, { auto: layout === 'auto', inlineAnswers: source === 'inline', endPage, startPage: start, skip: skipList, cancel: cancelRef.current, expectedCount }, (d, t, ocr) => {
-        setOcrRunning(ocr && d < t);
-        setBusy(ocr ? `Reading scanned pages with text recognition: ${d} of ${t}. This runs once per PDF…` : `Looking at the question pages: ${d} of ${t}…`);
-      });
-      setOcrRunning(false);
-      let questions = analyzed.questions;
-      if (source === 'inline' && analyzed.inlineKey) key = analyzed.inlineKey;
-      if (key && key.entries.length) questions = applyKey(questions, key);
-      const final: Exam = { ...exam, ...analyzed.examPatch, questions };
-      await saveExam(final);
-      // pages not read yet (skipped OCR) are finished in the background; the exam is usable now
-      resumeBackgroundText(exam.id);
+      const r = await importExam(
+        {
+          question: buf,
+          name: name.trim() || file.name,
+          category: subject.trim(),
+          layout,
+          perQuestion: per,
+          startPage: start,
+          skip: skipList,
+          keySource: source,
+          keyPdf: source === 'pdf' && keyFile ? await keyFile.arrayBuffer() : undefined,
+          keyStartPage: keyStartN,
+          keyText: paste,
+          sourceName: file.name,
+          keySourceName: keyFile?.name,
+          cancel: cancelRef.current,
+        },
+        (msg, ocr) => {
+          setBusy(msg);
+          setOcrRunning(!!ocr);
+        },
+      );
       setBusy('');
+      setOcrRunning(false);
       const q = new URLSearchParams();
-      if (note) q.set('note', note);
-      if (key) q.set('found', String(key.entries.filter((e) => e.answer).length));
-      go(`/exam/${exam.id}/key?${q.toString()}`);
+      if (r.note) q.set('note', r.note);
+      if (r.keyFound != null) q.set('found', String(r.keyFound));
+      go(`/exam/${r.exam.id}/key?${q.toString()}`);
     } catch (e) {
       setBusy('');
+      setOcrRunning(false);
       setErr(String((e as Error)?.message ?? e));
     }
   };
 
   return (
     <div data-testid="import-page">
-      <H1>Import a PDF exam</H1>
+      <H1>Import</H1>
       <p className="mb-3 border border-gray-400 bg-gray-50 p-2 text-sm" data-testid="import-note">
         Only import materials you have the right to use. Everything stays on this device.
       </p>
+      <div className="mb-4 flex gap-2" role="tablist">
+        <button role="tab" aria-selected={mode === 'one'} className={mode === 'one' ? 'btn-primary' : 'btn'} onClick={() => setMode('one')} data-testid="mode-one">One exam</button>
+        <button role="tab" aria-selected={mode === 'folder'} className={mode === 'folder' ? 'btn-primary' : 'btn'} onClick={() => setMode('folder')} data-testid="mode-folder">A whole folder of exams</button>
+      </div>
+      {mode === 'folder' ? (
+        <FolderImport />
+      ) : (
+      <>
 
       <H2>1. Question PDF</H2>
       <div
@@ -155,15 +143,20 @@ export function ImportPage() {
               <input className="field ml-2 w-72" value={name} onChange={(e) => setName(e.target.value)} data-testid="exam-name" />
             </label>
             <label>
-              Subject (optional)
-              <input className="field ml-2 w-44" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Cardiology" />
+              Folder
+              <input className="field ml-2 w-44" list="folder-names" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Surgery" data-testid="exam-folder" />
+              <datalist id="folder-names">
+                {(cats ?? []).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </label>
           </div>
 
           <H2>2. How are the questions laid out?</H2>
           <div className="space-y-1 text-sm">
             <label className="block">
-              <input type="radio" name="layout" checked={layout === 'auto'} onChange={() => setLayout('auto')} data-testid="layout-auto" /> <b>Work it out for me</b> (recommended). Block Sim reads the question numbers on the pages. Falls back to one page per question when it cannot.
+              <input type="radio" name="layout" checked={layout === 'auto'} onChange={() => setLayout('auto')} data-testid="layout-auto" /> <b>Work it out for me</b> (recommended). Test Simulator reads the question numbers on the pages. Falls back to one page per question when it cannot.
             </label>
             <label className="block">
               <input type="radio" name="layout" checked={layout === 'fixed'} onChange={() => setLayout('fixed')} data-testid="layout-fixed" /> <b>Fixed</b>: exactly
@@ -233,6 +226,8 @@ export function ImportPage() {
         </>
       )}
       {err && <div className="mt-3 border border-red-700 bg-red-50 p-2 text-sm" role="alert" data-testid="import-error">{err}</div>}
+      </>
+      )}
     </div>
   );
 }

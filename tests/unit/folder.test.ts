@@ -97,9 +97,9 @@ describe('data folder', () => {
     await A.saveAttempt(attempt('a1', 'e1', 'B', 'completed') as any);
     await A.addRedo('e1:q1', 'e1', 'B', true, 1000);
     await A.flush();
-    expect([...(await shared.getDirectoryHandle('exams')).files.keys()].sort()).toEqual(['e1.json', 'e1.pdf']);
-    expect([...(await shared.getDirectoryHandle('attempts')).files.keys()]).toEqual(['a1.json']);
-    const examFile = JSON.parse(await (await (await (await shared.getDirectoryHandle('exams')).getFileHandle('e1.json')).getFile()).text());
+    expect([...(await (await shared.getDirectoryHandle('Test Simulator Data')).getDirectoryHandle('exams')).files.keys()].sort()).toEqual(['e1.json', 'e1.pdf']);
+    expect([...(await (await shared.getDirectoryHandle('Test Simulator Data')).getDirectoryHandle('attempts')).files.keys()]).toEqual(['a1.json']);
+    const examFile = JSON.parse(await (await (await (await (await shared.getDirectoryHandle('Test Simulator Data')).getDirectoryHandle('exams')).getFileHandle('e1.json')).getFile()).text());
     expect(examFile.schema).toBe(2);
 
     const B = await computer('folder-B');
@@ -138,7 +138,7 @@ describe('data folder', () => {
     await A.chooseFolder();
     await A.deleteAttempt('b1');
     await A.flush();
-    expect((await shared.getDirectoryHandle('attempts')).files.has('b1.json')).toBe(false);
+    expect((await (await shared.getDirectoryHandle('Test Simulator Data')).getDirectoryHandle('attempts')).files.has('b1.json')).toBe(false);
     const B = await computer('folder-B');
     await B.chooseFolder();
     expect(await B.db.attempts.get('b1')).toBeUndefined();

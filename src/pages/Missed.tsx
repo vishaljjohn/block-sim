@@ -35,7 +35,6 @@ export function Missed() {
   const reviews = useLive(() => db.reviews.toArray(), []);
   const exams = useLive(() => db.exams.toArray(), []);
   const [exam, setExam] = useState('');
-  const [tag, setTag] = useState('');
   const [reason, setReason] = useState('');
   const [status, setStatus] = useState('active');
   const [date, setDate] = useState<DateFilter>('any');
@@ -59,7 +58,6 @@ export function Missed() {
     const needle = q.trim().toLowerCase();
     const out = rows.filter((r) => {
       if (exam && r.examId !== exam) return false;
-      if (tag && !r.tags.includes(tag)) return false;
       if (reason && (reason === 'none' ? r.reason != null : r.reason !== reason)) return false;
       if (status === 'active' && r.schedule.status === 'Mastered') return false;
       if (status === 'due' && !(r.schedule.dueAt != null && r.schedule.dueAt <= now)) return false;
@@ -71,7 +69,7 @@ export function Missed() {
       if (date === 'stale14' && r.lastReviewed != null && now - r.lastReviewed < 14 * DAY) return false;
       if (needle) {
         const e = examById.get(r.examId);
-        const hay = `${e?.name ?? ''} ${r.tags.join(' ')} ${e && texts ? questionText(e, r.qid, texts) : ''} ${e?.questions.find((x) => x.id === r.qid)?.explanation ?? ''}`.toLowerCase();
+        const hay = `${e?.name ?? ''} ${e && texts ? questionText(e, r.qid, texts) : ''} ${e?.questions.find((x) => x.id === r.qid)?.explanation ?? ''}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -83,10 +81,9 @@ export function Missed() {
       times: (a, b) => b.timesMissed - a.timesMissed,
     };
     return out.sort(by[sort]);
-  }, [rows, exam, tag, reason, status, date, why, q, sort, texts, examById]);
+  }, [rows, exam, reason, status, date, why, q, sort, texts, examById]);
 
   if (!attempts || !reviews || !exams) return <div className="text-sm">Loading…</div>;
-  const tags = [...new Set(rows.flatMap((r) => r.tags))].sort();
   const examIds = [...new Set(rows.map((r) => r.examId))];
   const dueCount = rows.filter((r) => r.schedule.dueAt != null && r.schedule.dueAt <= now).length;
   const playable = filtered.filter((r) => examById.has(r.examId));
@@ -96,9 +93,9 @@ export function Missed() {
     go('/setup?bank=1');
   };
   const csv = () => {
-    const out: (string | number)[][] = [['Exam', 'Question #', 'Tags', 'Date missed', 'My answer', 'Correct answer', 'Why listed', 'Reason', 'Times missed', 'Last reviewed', 'Next due', 'Status']];
+    const out: (string | number)[][] = [['Exam', 'Question #', 'Date missed', 'My answer', 'Correct answer', 'Why listed', 'Reason', 'Times missed', 'Last reviewed', 'Next due', 'Status']];
     for (const r of filtered)
-      out.push([examById.get(r.examId)?.name ?? '(deleted exam)', r.number, r.tags.join('; '), fmtDate(r.missedAt), r.myAnswer ?? '', r.key ?? '', r.why.join(' + '), MISS_REASONS.find((m) => m.id === r.reason)?.label ?? '', r.timesMissed, fmtDate(r.lastReviewed), r.schedule.dueAt ? fmtDate(r.schedule.dueAt) : '', r.schedule.status]);
+      out.push([examById.get(r.examId)?.name ?? '(deleted exam)', r.number, fmtDate(r.missedAt), r.myAnswer ?? '', r.key ?? '', r.why.join(' + '), MISS_REASONS.find((m) => m.id === r.reason)?.label ?? '', r.timesMissed, fmtDate(r.lastReviewed), r.schedule.dueAt ? fmtDate(r.schedule.dueAt) : '', r.schedule.status]);
     downloadText(toCsv(out), `block-sim-missed-${new Date().toISOString().slice(0, 10)}.csv`);
   };
   const Sel = ({ value, set, children, label, testId }: { value: string; set: (v: string) => void; children: React.ReactNode; label: string; testId?: string }) => (
@@ -114,7 +111,7 @@ export function Missed() {
     <div data-testid="missed-page">
       <H1>Missed Questions</H1>
       <p className="mb-3 text-sm text-gray-700">
-        Every question you answered wrong, guessed, or marked in a finished block, across all exams. Redo them blind on a spaced schedule (3, 7, 21, 60 days); two correct redos on different days = Mastered.
+        Every question you answered wrong or marked in a finished block, across all exams. Redo them blind on a spaced schedule (3, 7, 21, 60 days); two correct redos on different days = Mastered.
       </p>
       {rows.length === 0 ? (
         <div className="border border-gray-400 p-4 text-sm">Nothing here yet. Finish a block and the questions you miss, guess or mark show up here.</div>
@@ -125,12 +122,6 @@ export function Missed() {
               <option value="">All exams</option>
               {examIds.map((id) => (
                 <option key={id} value={id}>{examById.get(id)?.name ?? '(deleted exam)'}</option>
-              ))}
-            </Sel>
-            <Sel label="Tag" value={tag} set={setTag}>
-              <option value="">All tags</option>
-              {tags.map((t) => (
-                <option key={t}>{t}</option>
               ))}
             </Sel>
             <Sel label="Reason" value={reason} set={setReason}>
@@ -149,9 +140,8 @@ export function Missed() {
               <option value="all">All</option>
             </Sel>
             <Sel label="Listed because" value={why} set={setWhy}>
-              <option value="">Wrong, guessed or marked</option>
+              <option value="">Wrong or marked</option>
               <option value="wrong">Wrong</option>
-              <option value="guess">Guessed</option>
               <option value="marked">Marked</option>
             </Sel>
             <Sel label="Date" value={date} set={(v) => setDate(v as DateFilter)}>
@@ -191,7 +181,6 @@ export function Missed() {
                 <tr>
                   <th className="th">Exam</th>
                   <th className="th">Q#</th>
-                  <th className="th">Tags</th>
                   <th className="th">Missed</th>
                   <th className="th">Mine / correct</th>
                   <th className="th">Reason</th>
@@ -210,11 +199,9 @@ export function Missed() {
                     <tr key={r.qid} className="cursor-pointer hover:bg-blue-50" onClick={() => go(`/review/${r.attemptId}?i=${r.itemIndex}`)} data-testid={`missed-row-${r.number}`}>
                       <td className="td">{ex?.name ?? <span className="text-gray-500">(deleted exam)</span>}</td>
                       <td className="td">{r.number}</td>
-                      <td className="td">{r.tags.join(', ')}</td>
                       <td className="td whitespace-nowrap">{fmtDate(r.missedAt)}</td>
                       <td className="td whitespace-nowrap">
                         <span style={{ color: r.myAnswer === r.key ? '#15803d' : '#dc2626' }}>{r.myAnswer ?? '—'}</span> / <b>{r.key}</b>
-                        {r.why.includes('guess') && <span className="ml-1 text-xs text-gray-600">guess</span>}
                         {r.why.includes('marked') && <span className="ml-1 text-xs text-gray-600">marked</span>}
                       </td>
                       <td className="td">{MISS_REASONS.find((m) => m.id === (r.reason as MissReason))?.label ?? ''}</td>

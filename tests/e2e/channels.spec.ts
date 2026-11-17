@@ -12,14 +12,14 @@ test('beta and stable keep separate data, storage and service workers', async ({
   await startBlock(page, { mode: 'untimed' });
   await page.getByTestId('btn-settings').click();
   await page.getByRole('menuitem', { name: /Save and exit/ }).click();
-  await expect(page.getByTestId('resume-card')).toBeVisible();
+  await expect(page.getByTestId('group-progress')).toBeVisible();
 
   await page.goto('./beta/');
   const skip = page.getByTestId('welcome-skip');
   await skip.click();
   await expect(page.getByTestId('beta-badge')).toBeVisible();
   await expect(page.getByTestId('home')).toBeVisible();
-  await expect(page.getByTestId('resume-card')).toHaveCount(0);
+  await expect(page.getByTestId('group-progress')).toHaveCount(0);
   const dbs = await page.evaluate(async () => ((await indexedDB.databases?.()) ?? []).map((d) => d.name));
   if (browserName === 'chromium') expect(dbs).toEqual(expect.arrayContaining(['blocksim', 'blocksim-beta']));
   // service workers: stable never controls beta
@@ -34,5 +34,5 @@ test('beta and stable keep separate data, storage and service workers', async ({
   }
   // and stable still has its unfinished block
   await page.goto('./');
-  await expect(page.getByTestId('resume-card')).toBeVisible();
+  await expect(page.getByTestId('group-progress')).toBeVisible();
 });

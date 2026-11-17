@@ -61,6 +61,11 @@ export interface Exam {
   textStatus: 'none' | 'partial' | 'done';
   /** show bubbles for the whole exam instead of clickable choices */
   alwaysBubbles?: boolean;
+  /** where the question PDF lives inside the data folder's parent (folder import): read from there, not copied */
+  sourcePath?: string;
+  /** original file names, so a folder import does not add the same exam twice */
+  sourceName?: string;
+  keySourceName?: string;
 }
 
 export interface Word {

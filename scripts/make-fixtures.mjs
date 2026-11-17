@@ -314,4 +314,13 @@ const b = await fixtureB();
 const c = await fixtureC();
 const d = await fixtureD();
 fs.writeFileSync(path.join(out, 'answers.json'), JSON.stringify({ a: a.map((q) => q.answer), b: b.map((q) => q.answer), c: c.map((q) => q.answer), d: d.map((q) => q.answer), f: f.map((q) => q.answer) }));
+// a folder of exams, organised like a student's (subject folders, "N Q.pdf" + "NA.pdf")
+const fold = path.join(out, 'exams-folder');
+fs.rmSync(fold, { recursive: true, force: true });
+fs.mkdirSync(path.join(fold, '1 Surgery'), { recursive: true });
+fs.mkdirSync(path.join(fold, '2 OBGYN'), { recursive: true });
+fs.copyFileSync(path.join(out, 'a-image-questions.pdf'), path.join(fold, '1 Surgery', '1 Q.pdf'));
+fs.copyFileSync(path.join(out, 'a-key.pdf'), path.join(fold, '1 Surgery', '1A.pdf'));
+fs.copyFileSync(path.join(out, 'b-answer-after.pdf'), path.join(fold, '2 OBGYN', '1 Q.pdf'));
+fs.copyFileSync(path.join(out, 'd-two-column.pdf'), path.join(fold, '2 OBGYN', '2 Q.pdf'));
 console.log('fixtures written to', path.relative(root, out));

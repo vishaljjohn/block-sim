@@ -80,8 +80,6 @@ export function applyKey(questions: Question[], key: ParsedKey, keepExisting = f
     if (!(keepExisting && q.answer)) out.answer = e.answer;
     if (!(keepExisting && q.explanation)) out.explanation = e.explanation;
     out.keyConfidence = e.conf;
-    const tags = key.tags[e.n];
-    if (tags?.length && !q.tags.length) out.tags = tags;
     if (out.answer && out.answer.charCodeAt(0) - 65 >= out.choiceCount) out.choiceCount = out.answer.charCodeAt(0) - 64;
     if (!out.answer && e.answerText) {
       const letter = q.choiceTexts?.length ? resolveAnswerText(e.answerText, q.choiceTexts) : '';

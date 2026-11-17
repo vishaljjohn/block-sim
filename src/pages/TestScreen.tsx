@@ -26,10 +26,10 @@ export function clearMirror(id: string) {
     localStorage.removeItem(mirrorKey(id));
   } catch {}
 }
-import type { Attempt, AttemptItem, Confidence, Exam, MissReason, PageText } from '../types';
+import type { Attempt, AttemptItem, Exam, MissReason, PageText } from '../types';
 import { MISS_REASONS } from '../types';
 import * as T from '../lib/timer';
-import { block, endBlock, lockItem, selectAnswer, setConfidence, setHighlights, startNextBlock, toggleStrike } from '../lib/attempt';
+import { block, endBlock, lockItem, selectAnswer, setHighlights, startNextBlock, toggleStrike } from '../lib/attempt';
 import { classifyChange, isCorrect } from '../lib/score';
 import { choiceLetters, segmentRect, usesChoiceRegions } from '../lib/layout';
 import { examPdf, pageSize, renderPage, type PdfDoc } from '../lib/pdf';
@@ -51,7 +51,6 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'incorrect', label: 'Incorrect' },
   { id: 'marked', label: 'Marked' },
   { id: 'changed', label: 'Changed answers' },
-  { id: 'guesses', label: 'Guesses' },
   { id: 'slowest', label: 'Slowest 10' },
 ];
 
@@ -775,16 +774,6 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                           Proceed to Next Item
                         </button>
                       )}
-                      {testing && a.settings.confidence && !itemLocked && (
-                        <div className="flex items-center gap-1 text-[13px]" data-testid="confidence">
-                          Confidence:
-                          {(['sure', 'unsure', 'guess'] as Confidence[]).map((c) => (
-                            <button key={c} className="border border-gray-500 px-2 py-0.5 capitalize" style={{ background: cur?.confidence === c ? '#1c4973' : '#f3f3f3', color: cur?.confidence === c ? '#fff' : '#000' }} aria-pressed={cur?.confidence === c} onClick={() => editItem((it) => setConfidence(it, c))} data-testid={`conf-${c}`}>
-                              {c}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
                     {reveal && cur && (
@@ -805,12 +794,6 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                           <div className="text-[15px]">{T.fmtDuration(cur.timeMs)}</div>
                           <div className="text-gray-600">Time spent</div>
                         </div>
-                        {cur.confidence && (
-                          <div>
-                            <div className="text-[15px] capitalize">{cur.confidence}</div>
-                            <div className="text-gray-600">Confidence</div>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
