@@ -47,7 +47,21 @@ export function detectCrop(px: Pixels, words: Word[] = []): Rect {
       }
     }
     const domLight = ((topBin >> 8) << 4) * 0.299 + (((topBin >> 4) & 15) << 4) * 0.587 + ((topBin & 15) << 4) * 0.114 > 200;
-    rowBar[y] = n / W < 0.55 && top / W > 0.45 && !domLight ? 1 : 0;
+    // toolbars are nearly all one color with little white; a dark picture (x-ray, CT, photo) sits on a white page,
+    // so its rows still have plenty of white and must never be treated as a bar
+    rowBar[y] = n / W < 0.22 && top / W > 0.45 && !domLight ? 1 : 0;
+  }
+  // toolbars are short: a tall block of "bar" rows is a wide dark picture (an x-ray across the page), keep it
+  for (let y = 0; y < H; ) {
+    if (!rowBar[y]) {
+      y++;
+      continue;
+    }
+    let e = y;
+    while (e + 1 < H && rowBar[e + 1]) e++;
+    const atEdge = y < H * 0.04 || e > H * 0.96;
+    if (e - y + 1 > H * (atEdge ? 0.16 : 0.1)) rowBar.fill(0, y, e + 1);
+    y = e + 1;
   }
   const isBar = (y: number) => rowBar[y] === 1;
 
@@ -95,25 +109,33 @@ export function detectCrop(px: Pixels, words: Word[] = []): Rect {
       }
     }
     const domLight = ((topBin >> 8) << 4) * 0.299 + (((topBin >> 4) & 15) << 4) * 0.587 + ((topBin & 15) << 4) * 0.114 > 200;
-    colBar[x] = n / bandH < 0.55 && top / bandH > 0.45 && !domLight ? 1 : 0;
+    colBar[x] = n / bandH < 0.22 && top / bandH > 0.45 && !domLight ? 1 : 0;
   }
-  let cA = 0;
-  let cB = W - 1;
-  {
-    let best = -1;
-    let s = -1;
-    for (let x = 0; x <= W; x++) {
-      const bar = x === W || colBar[x] === 1;
-      if (!bar && s < 0) s = x;
-      if (bar && s >= 0) {
-        if (x - 1 - s > best) {
-          best = x - 1 - s;
-          cA = s;
-          cB = x - 1;
-        }
-        s = -1;
-      }
+  // side bars (scrollbars, dark sidebars, a dark desktop around a window) only ever sit at the left and right edges:
+  // trim bar columns that connect to an edge (small gaps allowed); anything between them, such as an x-ray beside or
+  // between the text, stays
+  const gapMax = Math.max(2, Math.round(W * 0.01));
+  const edgeRun = (from: number, dir: 1 | -1) => {
+    let x = from;
+    let last = from - dir;
+    let gap = 0;
+    while (x >= 0 && x < W) {
+      if (colBar[x]) {
+        last = x;
+        gap = 0;
+      } else if (++gap > gapMax) break;
+      x += dir;
     }
+    return last;
+  };
+  let cA = edgeRun(0, 1) + 1;
+  let cB = edgeRun(W - 1, -1) - 1;
+  // a wide "bar" at an edge is a picture filling that side, not a sidebar
+  if (cA > W * 0.25) cA = 0;
+  if (cB < W * 0.75) cB = W - 1;
+  if (cB - cA < W * 0.2) {
+    cA = 0;
+    cB = W - 1;
   }
 
   // ink extents within the band
@@ -161,7 +183,8 @@ export function detectCrop(px: Pixels, words: Word[] = []): Rect {
       if (first[1] - first[0] < H * 0.04 && first[0] < bestA + H * 0.04 && gapTop > H * 0.012 && y1 - runs[1][0] > H * 0.2) y0 = runs[1][0];
       const last = runs[runs.length - 1];
       const prev = runs[runs.length - 2];
-      if (last[1] - last[0] < H * 0.12 && last[1] > bestB - H * 0.08 && last[0] - prev[1] > H * 0.15) y1 = prev[1];
+      // (only a thin strip: a short picture far below the choices is still part of the question)
+      if (last[1] - last[0] < H * 0.05 && last[1] > bestB - H * 0.08 && last[0] - prev[1] > H * 0.15) y1 = prev[1];
       // recompute the horizontal extent for the rows kept
       if (y0 !== first[0] || y1 !== last[1]) {
         x0 = W;
@@ -173,6 +196,51 @@ export function detectCrop(px: Pixels, words: Word[] = []): Rect {
               if (x > x1) x1 = x;
             }
       }
+    }
+  }
+  // safety net for any PDF: a picture (gray or dark, picture-sized) left outside the area is pulled back in, so an
+  // x-ray, CT or photo is never trimmed away; thin strips and colored toolbars stay out
+  {
+    const content = new Uint8Array(H);
+    for (let y = 0; y < H; y++) {
+      if (y >= y0 && y <= y1) continue;
+      let n = 0;
+      for (let x = cA; x <= cB; x++) {
+        const i = (y * W + x) * 4;
+        const r0 = data[i];
+        const g0 = data[i + 1];
+        const b0 = data[i + 2];
+        if (lum(data, i) < 150 && Math.max(r0, g0, b0) - Math.min(r0, g0, b0) < 45) n++;
+      }
+      content[y] = !isBar(y) && n > (cB - cA + 1) * 0.02 ? 1 : 0;
+    }
+    const grow = (from: number, dir: 1 | -1) => {
+      // walk away from the area across small blank gaps; keep a run only if it is picture-sized
+      let y = from;
+      let edge = from;
+      let gap = 0;
+      let run = 0;
+      while (y >= 0 && y < H) {
+        if (content[y]) {
+          run++;
+          gap = 0;
+          if (run > H * 0.04) edge = y;
+        } else if (++gap > H * 0.03) break;
+        y += dir;
+      }
+      return edge;
+    };
+    const up = grow(y0 - 1, -1);
+    const down = grow(y1 + 1, 1);
+    if (up < y0 - 1 || down > y1 + 1) {
+      for (let y = Math.min(up, y0); y <= Math.max(down, y1); y++)
+        for (let x = cA; x <= cB; x++)
+          if (lum(data, (y * W + x) * 4) < 170) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+          }
+      y0 = Math.min(y0, up);
+      y1 = Math.max(y1, down);
     }
   }
   let r: Rect = { x: x0 / W, y: y0 / H, w: (x1 - x0 + 1) / W, h: (y1 - y0 + 1) / H };
@@ -240,25 +308,35 @@ export function highlightedChoice(px: Pixels, choices: { letter: string; x: numb
 }
 
 /** Rows with ink (dark pixels) inside a rectangle, merged into bands (page fractions). */
-export function inkBands(px: Pixels, within: Rect): [number, number][] {
+/** Rows of the page with ink, as [top, bottom, left, right] page fractions. */
+export function inkBands(px: Pixels, within: Rect): [number, number, number, number][] {
   const { data, width: W, height: H } = px;
   const x0 = Math.max(0, Math.floor(within.x * W));
   const x1 = Math.min(W - 1, Math.ceil((within.x + within.w) * W));
   const y0 = Math.max(0, Math.floor(within.y * H));
   const y1 = Math.min(H - 1, Math.ceil((within.y + within.h) * H));
-  const bands: [number, number][] = [];
+  const bands: [number, number, number, number][] = [];
   let start = -1;
   let gap = 0;
+  let left = W;
+  let right = -1;
   for (let y = y0; y <= y1 + 1; y++) {
     let ink = false;
     if (y <= y1) {
       let n = 0;
+      let l = -1;
+      let r = -1;
       for (let x = x0; x <= x1; x++) {
-        if (lum(data, (y * W + x) * 4) < 200) n++;
-        if (n >= 2) {
-          ink = true;
-          break;
+        if (lum(data, (y * W + x) * 4) < 200) {
+          n++;
+          if (l < 0) l = x;
+          r = x;
         }
+      }
+      if (n >= 2) {
+        ink = true;
+        left = Math.min(left, l);
+        right = Math.max(right, r);
       }
     }
     if (ink) {
@@ -267,9 +345,11 @@ export function inkBands(px: Pixels, within: Rect): [number, number][] {
     } else if (start >= 0) {
       gap++;
       if (gap > H * 0.006 || y > y1) {
-        bands.push([start / H, (y - gap + 1) / H]);
+        bands.push([start / H, (y - gap + 1) / H, left / W, (right + 1) / W]);
         start = -1;
         gap = 0;
+        left = W;
+        right = -1;
       }
     }
   }

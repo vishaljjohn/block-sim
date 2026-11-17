@@ -1,4 +1,69 @@
 import type { Highlight, HighlightColor, Rect, Word } from '../types';
+import { buildLines } from './textLines';
+import { matchChoiceLabel } from './detect';
+
+interface Order {
+  /** word index → position in reading order */
+  rank: Int32Array;
+  /** reading order → word index */
+  order: number[];
+  /** typical word height on the page */
+  medH: number;
+}
+const orders = new WeakMap<Word[], Order>();
+
+/**
+ * Reading order of a page's words (column by column, line by line, left to right). Text recognition does not
+ * always list words in that order, so ranges of words are always taken in this order, never by raw index.
+ */
+export function readingOrder(words: Word[]): Order {
+  const hit = orders.get(words);
+  if (hit) return hit;
+  const order: number[] = [];
+  const seen = new Uint8Array(words.length);
+  for (const l of buildLines(words))
+    for (const i of l.idx) {
+      if (seen[i]) continue;
+      seen[i] = 1;
+      order.push(i);
+    }
+  for (let i = 0; i < words.length; i++) if (!seen[i]) order.push(i);
+  const rank = new Int32Array(words.length);
+  order.forEach((w, r) => (rank[w] = r));
+  const hs = words.filter((w) => w.t.trim()).map((w) => w.h).sort((a, b) => a - b);
+  const medH = hs.length ? hs[Math.floor(hs.length / 2)] : 0.015;
+  const o = { rank, order, medH };
+  orders.set(words, o);
+  return o;
+}
+
+/** A word box far taller than the text around it is a recognition error (a picture or table read as one "word"). */
+export const isJunkWord = (w: Word, medH: number) => w.h > medH * 2.6 || !w.t.trim();
+
+/** Word indices from a to b (either order) in reading order. */
+export function wordsBetween(words: Word[], a: number, b: number): number[] {
+  const { rank, order } = readingOrder(words);
+  const ra = rank[a] ?? 0;
+  const rb = rank[b] ?? 0;
+  const out = order.slice(Math.min(ra, rb), Math.max(ra, rb) + 1);
+  return ra <= rb ? out : out.reverse();
+}
+
+/**
+ * Words of the answer choices inside an area: from the first line labelled A) (followed by a B) line) down to the
+ * end of the area, in the same column. Answer choices are struck out, never highlighted.
+ */
+export function choiceWords(words: Word[], area: Rect | null): Set<number> {
+  const out = new Set<number>();
+  const inArea = (l: { x: number; y: number; w: number; h: number }) => !area || (l.y + l.h / 2 >= area.y && l.y + l.h / 2 <= area.y + area.h && l.x + l.w / 2 >= area.x && l.x + l.w / 2 <= area.x + area.w);
+  const lines = buildLines(words).filter(inArea);
+  const labelled = lines.map((l) => matchChoiceLabel(l.text)?.letter ?? null);
+  const a = labelled.findIndex((L, i) => L === 'A' && labelled.slice(i + 1).some((M) => M === 'B'));
+  if (a < 0) return out;
+  const start = lines[a];
+  for (const l of lines) if (l.column === start.column && l.y >= start.y - start.h * 0.3) for (const i of l.idx) out.add(i);
+  return out;
+}
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -16,8 +81,10 @@ export function boxFromDrag(page: number, x0: number, y0: number, x1: number, y1
 export function wordAt(words: Word[], x: number, y: number, slack = 0.012): number {
   let best = -1;
   let bestD = Infinity;
+  const { medH } = readingOrder(words);
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
+    if (isJunkWord(w, medH)) continue;
     if (y < w.y - w.h * 0.4 || y > w.y + w.h * 1.4) continue;
     const dx = x < w.x ? w.x - x : x > w.x + w.w ? x - (w.x + w.w) : 0;
     if (dx < bestD) {
@@ -33,7 +100,6 @@ export interface TextPos {
   w: number;
   c: number;
 }
-const before = (a: TextPos, b: TextPos) => a.w < b.w || (a.w === b.w && a.c < b.c);
 
 /** Character offset inside a word for an x position (characters assumed equally wide). */
 export function charAt(word: Word, x: number): number {
@@ -47,6 +113,9 @@ export function charAt(word: Word, x: number): number {
  */
 export function addWordRange(list: Highlight[], page: number, a: number | TextPos, b: number | TextPos, id: string, color?: HighlightColor, words?: Word[]): Highlight[] {
   const len = (w: number) => words?.[w]?.t.length ?? Infinity;
+  const rk = words ? readingOrder(words).rank : null;
+  const r = (w: number) => (rk ? (rk[w] ?? w) : w);
+  const before = (x: TextPos, y: TextPos) => r(x.w) < r(y.w) || (x.w === y.w && x.c < y.c);
   let s: TextPos;
   let e: TextPos;
   if (typeof a === 'number' && typeof b === 'number') {
@@ -67,7 +136,7 @@ export function addWordRange(list: Highlight[], page: number, a: number | TextPo
     const hs: TextPos = { w: h.start, c: h.sc ?? 0 };
     const he: TextPos = { w: h.end, c: h.ec ?? Infinity };
     // touching: same or neighbouring words
-    if (h.start <= e.w + 1 && h.end >= s.w - 1) {
+    if (r(h.start) <= r(e.w) + 1 && r(h.end) >= r(s.w) - 1) {
       if (before(hs, s)) s = hs;
       if (before(e, he)) e = he;
     } else rest.push(h);
@@ -83,16 +152,25 @@ export function removeHighlight(list: Highlight[], id: string): Highlight[] {
 }
 
 /** Rectangles (one per text line) covering a word range; sc/ec trim the first/last word to characters. */
-export function rectsForRange(words: Word[], start: number, end: number, sc?: number, ec?: number): Rect[] {
+export function rectsForRange(words: Word[], start: number, end: number, sc?: number, ec?: number, skip?: Set<number>): Rect[] {
+  if (!words.length) return [];
+  const a = Math.max(0, Math.min(words.length - 1, start));
+  const b = Math.max(0, Math.min(words.length - 1, end));
+  const { medH } = readingOrder(words);
   const out: Rect[] = [];
   let cur: Rect | null = null;
-  for (let i = Math.max(0, start); i <= Math.min(words.length - 1, end); i++) {
+  for (const i of wordsBetween(words, a, b).sort((x, y) => readingOrder(words).rank[x] - readingOrder(words).rank[y])) {
     let w = words[i];
+    if (isJunkWord(w, medH) || skip?.has(i)) continue;
     const n = w.t.length || 1;
     const c0 = i === start && sc ? sc : 0;
     const c1 = i === end && ec != null ? ec : n;
     if (c0 > 0 || c1 < n) w = { ...w, x: w.x + (w.w * c0) / n, w: (w.w * Math.max(1, c1 - c0)) / n };
-    if (cur && Math.abs(w.y + w.h / 2 - (cur.y + cur.h / 2)) < Math.max(cur.h, w.h) * 0.6 && w.x >= cur.x - 0.01) {
+    // never taller than a line of text
+    const cy = w.y + w.h / 2;
+    const h = Math.min(w.h, medH * 1.5);
+    w = { ...w, y: cy - h / 2, h };
+    if (cur && Math.abs(cy - (cur.y + cur.h / 2)) < medH * 0.5 && w.x >= cur.x - 0.01 && w.x - (cur.x + cur.w) < 0.08) {
       const r = Math.max(cur.x + cur.w, w.x + w.w);
       const top = Math.min(cur.y, w.y);
       const bot = Math.max(cur.y + cur.h, w.y + w.h);

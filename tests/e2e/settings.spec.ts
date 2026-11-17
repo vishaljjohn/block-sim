@@ -113,13 +113,62 @@ test('review: highlight in the explanation (kept), question fits at XL next to t
   expect(qv.x + qv.width).toBeLessThanOrEqual(ex.x + 2);
   expect(ex.x + ex.width).toBeLessThanOrEqual((page.viewportSize()?.width ?? 1366) + 1);
   // select some words in the explanation → highlighted, and still there after a reload
-  const t = page.getByTestId('explanation-text').locator('span').first();
-  const b = (await t.boundingBox())!;
-  await page.mouse.move(b.x + 2, b.y + 6);
-  await page.mouse.down();
-  await page.mouse.move(b.x + 120, b.y + 6, { steps: 5 });
-  await page.mouse.up();
-  await expect(page.getByTestId('expl-highlight').first()).toBeVisible();
+  // (the panel may still be settling after the size change: measure again on each try)
+  await expect(async () => {
+    const t = page.getByTestId('explanation-text').locator('span').first();
+    const b = (await t.boundingBox())!;
+    await page.mouse.move(b.x + 2, b.y + 6);
+    await page.mouse.down();
+    await page.mouse.move(b.x + 120, b.y + 6, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.getByTestId('expl-highlight').first()).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 15_000 });
   await page.reload();
   await expect(page.getByTestId('expl-highlight').first()).toBeVisible();
+});
+
+test('item box hides the question list; full screen button; type minutes; tutor can be timed', async ({ page }, info) => {
+  await freshStart(page);
+  await page.goto('./#/exam/demo-exam');
+  await page.getByTestId('detail-new-attempt').click();
+  await page.getByTestId('mode-tutor').check();
+  await expect(page.getByTestId('timed-on')).toBeChecked();
+  await page.getByTestId('start-block').click();
+  await expect(page.getByTestId('test-screen')).toHaveAttribute('data-mode', 'tutor');
+  await expect(page.getByTestId('mode-chip')).toHaveText(/Tutor · Timed/);
+  // iPad Safari has no full screen for web pages, so the button is left out there
+  if (info.project.name !== 'ipad') await expect(page.getByTestId('btn-fullscreen')).toBeVisible();
+  // the item box opens and closes the question list
+  const nav = page.getByRole('navigation', { name: 'Question status' });
+  await expect(nav).toBeVisible();
+  await page.getByTestId('item-box').click();
+  await expect(nav).toHaveCount(0);
+  await page.getByTestId('item-box').click();
+  await expect(nav).toBeVisible();
+  // type a number of minutes
+  await page.getByTestId('timer').click();
+  const secs = (s: string | null) => s!.replace(/.*: /, '').split(':').reduce((a, b) => a * 60 + Number(b), 0);
+  const before = secs(await page.getByTestId('timer-popup-remaining').textContent());
+  await page.getByTestId('custom-minutes').fill('-2');
+  await page.getByTestId('apply-minutes').click();
+  const after = secs(await page.getByTestId('timer-popup-remaining').textContent());
+  expect(before - after).toBeGreaterThanOrEqual(115);
+  expect(before - after).toBeLessThanOrEqual(125);
+  await page.getByTestId('timer-untimed').check();
+  await expect(page.getByTestId('mode-chip')).toHaveText(/Tutor · Untimed/);
+  await expect(page.getByTestId('settings-menu')).toHaveCount(0);
+});
+
+test('folder picker: pick a listed folder or type a new one', async ({ page }) => {
+  await freshStart(page);
+  await page.goto('./#/');
+  await page.getByTestId('exam-row-demo-exam').getByText('Move').click();
+  await page.getByTestId('move-folder').selectOption('Surgery');
+  await page.getByRole('dialog').getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.getByTestId('folder-Surgery')).toBeVisible();
+  await page.getByTestId('exam-row-demo-exam').getByText('Move').click();
+  await page.getByTestId('move-folder').selectOption({ label: 'New folder…' });
+  await page.getByTestId('move-folder-name').fill('My Shelf');
+  await page.getByRole('dialog').getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.getByTestId('folder-My Shelf')).toBeVisible();
 });

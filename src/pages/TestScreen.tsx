@@ -78,6 +78,14 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [doc, setDoc] = useState<{ examId: string; doc: PdfDoc } | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [customMin, setCustomMin] = useState('');
+  const fsSupported = typeof document !== 'undefined' && !!document.documentElement.requestFullscreen;
+  const [isFull, setIsFull] = useState(() => !!document.fullscreenElement);
+  useEffect(() => {
+    const f = () => setIsFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', f);
+    return () => document.removeEventListener('fullscreenchange', f);
+  }, []);
   const [panel, setPanel] = useState<{ labs: boolean; calc: boolean; notes: boolean }>({ labs: false, calc: false, notes: false });
   const [menu, setMenu] = useState(false);
   const [modal, setModal] = useState<null | 'grid' | 'end' | 'confirm' | 'help' | 'timer'>(null);
@@ -595,13 +603,13 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
           {/* -------- top bar -------- */}
           <header className="keep-colors dark-focus relative z-30 flex h-[62px] shrink-0 items-center justify-between bg-navy px-2 text-white">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="status-font shrink-0 border border-white px-2 py-0.5 text-[14px] leading-tight" data-testid="item-box">
+              <button type="button" onClick={toggleSidebar} title={sidebar ? 'Hide the question list' : 'Show the question list'} aria-pressed={sidebar} className="status-font shrink-0 border border-white px-2 py-0.5 text-left text-[14px] leading-tight hover:bg-white/10" data-testid="item-box">
                 <div>
                   Item: <span data-testid="item-n">{idxInList}</span> of {listLen}
                 </div>
                 {a.blocks.length > 1 && <div>Block: {a.currentBlock + 1} of {a.blocks.length}</div>}
-                {a.blocks.length === 1 && <div className="text-[11px] opacity-90">{review ? 'Review' : a.mode === 'exam' ? 'Exam mode' : a.mode === 'tutor' ? 'Tutor mode' : 'Untimed'}</div>}
-              </div>
+                {a.blocks.length === 1 && <div className="text-[11px] opacity-90">{review ? 'Review' : a.mode === 'tutor' ? 'Tutor mode' : 'Test mode'}</div>}
+              </button>
               <div className="status-font hidden min-w-0 truncate text-[14px] md:block" title={a.name}>
                 {a.name}
                 {IS_BETA && <span className="ml-2 bg-yellow-300 px-1 text-xs font-bold text-black">BETA</span>}
@@ -619,6 +627,13 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
               </ToolButton>
             </div>
             <div className="flex items-center">
+              {fsSupported && (
+                <ToolButton label={isFull ? 'Exit Full' : 'Full Screen'} onClick={() => void (document.fullscreenElement ? document.exitFullscreen?.() : document.documentElement.requestFullscreen?.())?.catch?.(() => {})} testId="btn-fullscreen" active={isFull}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    {isFull ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+                  </svg>
+                </ToolButton>
+              )}
               <ToolButton label="Lab Values" onClick={() => setPanel((p) => ({ ...p, labs: !p.labs }))} testId="btn-labs" active={panel.labs}>
                 <IconLab />
               </ToolButton>
@@ -639,10 +654,6 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 {[
                   { l: sidebar ? 'Hide Question Status' : 'Show Question Status', f: toggleSidebar },
                   { l: 'Show/Hide Strikeout', f: () => setHideStrikes((s) => !s) },
-                  {
-                    l: document.fullscreenElement ? 'Exit Full Screen' : 'Full Screen',
-                    f: () => (document.fullscreenElement ? document.exitFullscreen?.() : document.documentElement.requestFullscreen?.())?.catch?.(() => {}),
-                  },
                   ...(exam && question && question.choices && question.choices.length >= 2
                     ? [
                         {
@@ -884,7 +895,12 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 Review · {a.items.filter(isCorrect).length} of {a.items.length} correct
               </div>
             ) : (
-              <button type="button" className="status-font border border-white px-2 py-1 text-left text-[13px]" onClick={() => setModal('timer')} title="Timer and mode: switch Timed / Tutor, add time" data-testid="timer">
+              <button type="button" className="status-font flex items-center gap-2 border border-white px-2 py-1 text-left text-[13px] hover:bg-white/10" onClick={() => setModal('timer')} title="Click to switch Test / Tutor mode, Timed / Untimed, or add or take away time" data-testid="timer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="13" r="8" />
+                  <path d="M12 9v4l2.5 2.5M9 2h6" />
+                </svg>
+                <span>
                 {remMs != null && !showElapsed ? (
                   <>
                     Block Time Remaining <span data-testid="timer-value" style={{ color: remMs <= 5 * 60_000 ? '#ffd24a' : undefined }}>{T.fmtClock(remMs)}</span>
@@ -894,6 +910,11 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                     Block Time Elapsed <span data-testid="timer-value">{T.fmtClock(elapsedMs)}</span>
                   </>
                 )}
+                </span>
+                <span className="flex items-center gap-1 rounded-sm bg-white/20 px-1.5 py-0.5 text-[11px]" data-testid="mode-chip">
+                  {a.mode === 'tutor' ? 'Tutor' : 'Test'} · {remMs != null ? 'Timed' : 'Untimed'}
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+                </span>
               </button>
             )}
             {!review && (
@@ -987,30 +1008,52 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
         <Modal title="Timer and mode" onClose={() => setModal(null)}>
           <div className="space-y-4 text-sm" data-testid="timer-popup">
             <div>
-              <div className="mb-1 font-bold">Mode for this block</div>
+              <div className="mb-1 font-bold">Answers</div>
               {(
                 [
-                  ['exam', 'Timed', 'Answers and explanations stay hidden until the block ends.'],
-                  ['tutor', 'Tutor', 'Submit each answer to see if it is right and read the explanation, then “Proceed to Next Item”.'],
-                  ['untimed', 'Untimed', 'Like Timed, without a countdown.'],
+                  [false, 'exam', 'Test mode', 'Answers and explanations stay hidden until the block ends.'],
+                  [true, 'tutor', 'Tutor mode', 'Submit each answer to see if it is right and read the explanation, then “Proceed to Next Item”.'],
                 ] as const
-              ).map(([m, label, help]) => (
-                <label key={m} className="mb-1 flex items-start gap-2">
+              ).map(([tut, id, label, help]) => (
+                <label key={id} className="mb-1 flex items-start gap-2">
                   <input
                     type="radio"
-                    name="mode"
-                    checked={a.mode === m}
-                    data-testid={`timer-mode-${m}`}
+                    name="answers"
+                    checked={(a.mode === 'tutor') === tut}
+                    data-testid={`timer-mode-${id}`}
+                    onChange={() => commit((d) => void (d.mode = tut ? 'tutor' : block(d).limitMs != null ? 'exam' : 'untimed'))}
+                  />
+                  <span>
+                    <b>{label}</b>
+                    <span className="block text-xs text-gray-600">{help}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div>
+              <div className="mb-1 font-bold">Timer</div>
+              {(
+                [
+                  [true, 'timed', 'Timed', 'A countdown for the block.'],
+                  [false, 'untimed', 'Untimed', 'No countdown; the time you take is still recorded.'],
+                ] as const
+              ).map(([timed, id, label, help]) => (
+                <label key={id} className="mb-1 flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="timed"
+                    checked={(b.limitMs != null) === timed}
+                    data-testid={`timer-${id}`}
                     onChange={() =>
                       commit((d) => {
-                        d.mode = m;
                         const bl = block(d);
-                        // timed needs a limit: give the time used so far plus the usual time for the questions left
-                        if (m === 'exam' && bl.limitMs == null) {
+                        if (timed && bl.limitMs == null) {
+                          // the time used so far plus the usual time for the questions left
                           const left = d.items.slice(bl.start, bl.end).filter((it) => !it.locked && !it.answer).length;
                           bl.limitMs = T.elapsed(bl.timer, Date.now()) + Math.max(1, left) * (d.settings.secPerQ ?? 90) * 1000;
                         }
-                        if (m !== 'exam') bl.limitMs = null;
+                        if (!timed) bl.limitMs = null;
+                        if (d.mode !== 'tutor') d.mode = timed ? 'exam' : 'untimed';
                       })
                     }
                   />
@@ -1021,16 +1064,31 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                 </label>
               ))}
             </div>
-            {a.mode === 'exam' && b.limitMs != null && (
+            {b.limitMs != null && (
               <div>
-                <div className="mb-1 font-bold">Add time</div>
-                <div className="flex flex-wrap gap-2">
-                  {[5, 10, 15, 30].map((m) => (
-                    <button key={m} className="btn" data-testid={`add-time-${m}`} onClick={() => commit((d) => void (block(d).limitMs = (block(d).limitMs ?? 0) + m * 60_000))}>
-                      +{m} min
+                <div className="mb-1 font-bold">Change the time</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[-5, 5, 10, 15, 30].map((m) => (
+                    <button key={m} className="btn" data-testid={`add-time-${m}`} onClick={() => commit((d) => void (block(d).limitMs = Math.max(T.elapsed(block(d).timer, Date.now()) + 60_000, (block(d).limitMs ?? 0) + m * 60_000)))}>
+                      {m > 0 ? '+' : '−'}
+                      {Math.abs(m)} min
                     </button>
                   ))}
                 </div>
+                <form
+                  className="mt-2 flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const v = parseFloat(customMin.replace(/[^\d.+-]/g, ''));
+                    if (!Number.isFinite(v) || v === 0) return;
+                    commit((d) => void (block(d).limitMs = Math.max(T.elapsed(block(d).timer, Date.now()) + 60_000, (block(d).limitMs ?? 0) + v * 60_000)));
+                    setCustomMin('');
+                  }}
+                >
+                  <input className="field w-24" value={customMin} onChange={(e) => setCustomMin(e.target.value)} placeholder="+5 or -5" aria-label="Minutes to add or take away" data-testid="custom-minutes" />
+                  <span className="text-xs text-gray-600">minutes</span>
+                  <button className="btn" type="submit" data-testid="apply-minutes">Apply</button>
+                </form>
                 <div className="mt-1 text-xs text-gray-600" data-testid="timer-popup-remaining">Time remaining: {T.fmtClock(remMs ?? 0)}</div>
               </div>
             )}

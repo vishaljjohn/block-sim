@@ -64,8 +64,17 @@ const QA: { q: string; a: ReactNode }[] = [
     ),
   },
   {
-    q: 'Timed, tutor and untimed modes',
-    a: <p>Click the clock at the bottom of the test screen to switch between <b>Timed</b>, <b>Tutor</b> (shows the answer and explanation after each question, with <b>Proceed to Next Item</b>) and <b>Untimed</b>, or to add 5–30 minutes.</p>,
+    q: 'Can I use Word files, text files or pasted questions?',
+    a: (
+      <>
+        <p>Yes. In <b>Import</b>, under <b>1. The questions</b>, choose <b>Word or text file</b> (.docx or .txt) or <b>Paste text</b>. Test Simulator turns the text into exam pages on your computer (nothing is uploaded): each numbered question gets its own page, and pictures in Word files stay with their question.</p>
+        <p>Number each question (1., 2., …) and letter its choices (A), B), …). Put a line like <b>Answer: C</b> after a question and its answer is used for the key; anything after it becomes the explanation, hidden until you answer. Old .doc files: open them in Word and save as .docx first.</p>
+      </>
+    ),
+  },
+  {
+    q: 'Test or tutor mode, timed or untimed',
+    a: <p>When you start a block, choose <b>Test mode</b> (answers at the end) or <b>Tutor mode</b> (the answer and explanation after each question, then <b>Proceed to Next Item</b>), and <b>Timed</b> or <b>Untimed</b>; any combination works. During the block, click the clock at the bottom (it shows the current mode) to switch either one, add or take away 5–30 minutes, or type any number of minutes such as +7 or -3.</p>,
   },
   {
     q: 'Highlighting and striking out',
@@ -77,7 +86,7 @@ const QA: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Keyboard shortcuts',
-    a: <p>A–Z select a choice · ← / → or P / N previous/next · M mark · L lab values · C calculator · Esc close panels. When a shortcut letter is also a choice (for example C), hold Alt/Option with it. Right-click (or long-press on iPad) strikes out a choice.</p>,
+    a: <p>A–Z select a choice · ← / → or P / N previous/next · click the Item box to hide or show the question list · M mark · L lab values · C calculator · Esc close panels. When a shortcut letter is also a choice (for example C), hold Alt/Option with it. Right-click (or long-press on iPad) strikes out a choice.</p>,
   },
   {
     q: 'Is my data private?',

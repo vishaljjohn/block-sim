@@ -32,6 +32,10 @@ for (const f of fs.readdirSync(nm('tesseract.js-core'))) {
 }
 fs.copyFileSync(nm('@tesseract.js-data', 'eng', '4.0.0_best_int', 'eng.traineddata.gz'), pub('vendor', 'tesseract', 'eng.traineddata.gz'));
 
+// the interface font (SIL Open Font License); the font file itself is bundled by Vite from src/index.css
+fs.mkdirSync(pub('vendor', 'inter'), { recursive: true });
+fs.copyFileSync(nm('@fontsource-variable', 'inter', 'LICENSE'), pub('vendor', 'inter', 'LICENSE.txt'));
+
 fs.mkdirSync(pub('demo'), { recursive: true });
 fs.writeFileSync(pub('demo', 'demo-exam.bin'), await buildDemoPdf());
 await makeIcons(pub());

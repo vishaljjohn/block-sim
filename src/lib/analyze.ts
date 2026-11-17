@@ -10,10 +10,11 @@ import { resolveAnswerText } from './keyParser';
 import { blankQuestion, fixedLayout, type HighlightReader, type WordsProvider } from './importer';
 import { examPdf, hasRealText, pageHasImage, pageWords, renderToCanvas, type PdfDoc } from './pdf';
 import { mergeWords } from './pdfWords';
-import { detectCrop, findRadios, highlightedChoice, inkBands } from './crop';
+import { detectCrop, findRadios, highlightedChoice, inkBands, union } from './crop';
 
 /** bump when page processing gains new results; older cached pages are upgraded in the background */
-export const PAGE_VERSION = 2;
+/** 3: the page trim no longer mistakes dark pictures (CT, x-ray) for toolbars; older trims are re-checked. */
+export const PAGE_VERSION = 3;
 import { coverInk, detectChoices, detectLayout, linesForSegment, matchChoiceLabel, pageLines, readingOrder, type PageLines } from './detect';
 import { ocrCanvas } from './ocr';
 import { saveExam, savePageTexts } from './store';
@@ -113,7 +114,7 @@ async function finish(examId: string | null, doc: PdfDoc, page: number, input: W
   let words = input;
   words = readingOrder(words);
   let autoCrop: Rect | null = null;
-  let ink: [number, number][] | undefined;
+  let ink: number[][] | undefined;
   let radios: Rect[] | undefined;
   if (examId) {
     try {
@@ -178,7 +179,9 @@ export function wordsProvider(examId: string | null): WordsProvider {
 }
 
 function toPageLines(pt: PageText): PageLines {
-  return pageLines(pt.page, pt.words, pt.autoCrop);
+  // how much of the page has ink: a page of pictures with no text still belongs to a question
+  const ink = (pt.ink ?? []).reduce((s, [a, b]) => s + (b - a), 0);
+  return { ...pageLines(pt.page, pt.words, pt.autoCrop), ink };
 }
 
 /** Run at import: read every question page (OCR if needed, cached), work out the layout, detect choices. */
@@ -342,7 +345,9 @@ async function processExamText(examId: string) {
       const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
       c.width = c.height = 1;
       const px = { data: img.data, width: img.width, height: img.height };
-      const crop = pt.autoCrop ?? detectCrop(px, pt.words);
+      // re-check the trim; it only ever grows, so nothing that was visible disappears
+      const fresh = detectCrop(px, pt.words);
+      const crop = pt.autoCrop ? union(pt.autoCrop, fresh) : fresh;
       await savePageTexts(examId, [{ ...pt, autoCrop: crop, ink: inkBands(px, crop), radios: await radiosFor(doc, pt.page, pt.words), v: PAGE_VERSION }]);
     } catch (e) {
       logError('upgrade page ' + pt.page, e);

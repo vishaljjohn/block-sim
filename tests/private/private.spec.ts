@@ -90,6 +90,11 @@ for (const p of pairs()) {
         debug: {
           pages: pages.sort((a, b) => a.page - b.page).map((x) => `${x.page}:${x.source}:${x.words.length}w:${x.autoCrop ? [x.autoCrop.x, x.autoCrop.y, x.autoCrop.w, x.autoCrop.h].map((v: number) => v.toFixed(2)).join('/') : 'none'}`),
           questions: qs.map((q) => `${q.number}:${q.segments.map((s: any) => s.page + (s.rect ? '*' : '')).join('+')}:${q.choices?.length ?? 0}ch:${q.answer || '-'}`),
+          // geometry only, for the picture-coverage check (scripts outside the repo render the pages and compare)
+          areas: qs.map((q) => ({ n: q.number, segs: q.segments.map((s: any) => ({ page: s.page, rect: s.rect ?? null })) })),
+          crops: Object.fromEntries(pages.map((x) => [x.page, x.autoCrop ?? null])),
+          examCrop: e.crop ?? null,
+          examAutoCrop: e.autoCrop !== false,
         },
       };
     });

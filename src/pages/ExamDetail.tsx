@@ -24,12 +24,23 @@ export function ExamDetail({ examId }: { examId: string }) {
   return (
     <div data-testid="exam-detail">
       <a className="link text-sm" href="#/">← Library</a>
+      <div className="card mt-3 p-5 sm:p-6">
+      <div className="eyebrow mb-1">{exam.subject || 'Exam'}</div>
       <H1>{exam.name}</H1>
-      <div className="mb-3 text-sm text-gray-700">
-        {exam.subject && <>{exam.subject} · </>}
-        {exam.questions.length} questions · {exam.questions.filter((q) => q.answer).length} with answers · {exam.pageCount} pages
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          ['Questions', exam.questions.length],
+          ['With answers', exam.questions.filter((q) => q.answer).length],
+          ['Blocks finished', done.length],
+          ['Best score', done.length ? `${Math.round(Math.max(...done.map((a) => scoreAttempt(a).pct)))}%` : '—'],
+        ].map(([k, v]) => (
+          <div key={k} className="rounded-xl border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+            <div className="eyebrow">{k}</div>
+            <div className="text-xl font-semibold tabular-nums">{v}</div>
+          </div>
+        ))}
       </div>
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {exam.keyChecked ? (
           <a className="btn-primary" href={`#/setup?exam=${exam.id}`} data-testid="detail-new-attempt">New attempt</a>
         ) : (
@@ -51,6 +62,7 @@ export function ExamDetail({ examId }: { examId: string }) {
           Export this exam
         </button>
         {busy && <span className="self-center text-sm">{busy}</span>}
+      </div>
       </div>
 
       <H2>Attempts</H2>
@@ -91,13 +103,13 @@ export function ExamDetail({ examId }: { examId: string }) {
                     <div className="flex flex-wrap gap-1">
                       {a.status === 'completed' ? (
                         <>
-                          <a className="btn py-0.5" href={`#/report/${a.id}`}>Score report</a>
-                          <a className="btn py-0.5" href={`#/review/${a.id}`}>Review</a>
+                          <a className="btn btn-sm" href={`#/report/${a.id}`}>Score report</a>
+                          <a className="btn btn-sm" href={`#/review/${a.id}`}>Review</a>
                         </>
                       ) : (
-                        <a className="btn py-0.5" href={`#/test/${a.id}`}>Resume</a>
+                        <a className="btn btn-sm" href={`#/test/${a.id}`}>Resume</a>
                       )}
-                      <button className="btn py-0.5" onClick={() => window.confirm('Delete this attempt permanently? Its answers, notes and highlights will be removed.') && void deleteAttempt(a.id)}>
+                      <button className="btn btn-sm" onClick={() => window.confirm('Delete this attempt permanently? Its answers, notes and highlights will be removed.') && void deleteAttempt(a.id)}>
                         Delete
                       </button>
                     </div>

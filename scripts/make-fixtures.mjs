@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createCanvas } from '@napi-rs/canvas';
 import { wrap } from './demo-pdf.mjs';
+import { zipSync, strToU8 } from 'fflate';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'tests', 'fixtures', 'generated');
@@ -323,4 +324,40 @@ fs.copyFileSync(path.join(out, 'a-image-questions.pdf'), path.join(fold, '1 Surg
 fs.copyFileSync(path.join(out, 'a-key.pdf'), path.join(fold, '1 Surgery', '1A.pdf'));
 fs.copyFileSync(path.join(out, 'b-answer-after.pdf'), path.join(fold, '2 OBGYN', '1 Q.pdf'));
 fs.copyFileSync(path.join(out, 'd-two-column.pdf'), path.join(fold, '2 OBGYN', '2 Q.pdf'));
+
+// ---- questions as plain text and as a Word file (original, made-up) ----
+const textQs = [
+  { stem: 'A made-up hiker develops an invented itchy rash after a fictional hike. Which step comes first?', choices: ['Wash the skin', 'Start a made-up drug', 'Order an imaginary scan', 'Do nothing'], answer: 'A' },
+  { stem: 'An invented patient has a pretend fever of 38.5 °C (≥ 38 °C). Which test is next in this fictional case?', choices: ['Test alpha', 'Test beta', 'Test gamma'], answer: 'C' },
+  { stem: 'The picture above shows a fictional pattern. What does the made-up pattern suggest?', choices: ['Pattern one', 'Pattern two', 'Pattern three', 'Pattern four', 'Pattern five'], answer: 'D', picture: true },
+];
+fs.writeFileSync(
+  path.join(out, 'g-questions.txt'),
+  textQs.map((q, i) => `${i + 1}. ${q.stem}\n${q.choices.map((c, k) => `${String.fromCharCode(65 + k)}) ${c}`).join('\n')}\nAnswer: ${q.answer}\nExplanation: Invented explanation for question ${i + 1}.\n`).join('\n'),
+);
+{
+  // a tiny Word file: numbered paragraphs, lettered choices, one picture
+  const pic = createCanvas(240, 120);
+  const g = pic.getContext('2d');
+  g.fillStyle = '#111';
+  g.fillRect(0, 0, 240, 120);
+  g.fillStyle = '#ddd';
+  g.beginPath();
+  g.arc(120, 60, 40, 0, Math.PI * 2);
+  g.fill();
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const para = (t) => `<w:p><w:r><w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p>`;
+  const picPara = `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2286000" cy="1143000"/><wp:docPr id="1" name="Picture 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2286000" cy="1143000"/></a:xfrm><a:prstGeom prst="rect"/></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+  const body = textQs
+    .map((q, i) => (q.picture ? picPara : '') + para(`${i + 1}. ${q.stem}`) + q.choices.map((c, k) => para(`${String.fromCharCode(65 + k)}. ${c}`)).join('') + para(`Answer: ${q.answer}`) + para(`Explanation: Invented explanation for question ${i + 1}.`))
+    .join('');
+  const files = {
+    '[Content_Types].xml': strToU8('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
+    '_rels/.rels': strToU8('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'),
+    'word/_rels/document.xml.rels': strToU8('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/p.png"/></Relationships>'),
+    'word/media/p.png': new Uint8Array(pic.toBuffer('image/png')),
+    'word/document.xml': strToU8(`<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body}</w:body></w:document>`),
+  };
+  fs.writeFileSync(path.join(out, 'g-questions.docx'), zipSync(files));
+}
 console.log('fixtures written to', path.relative(root, out));

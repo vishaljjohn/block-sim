@@ -22,7 +22,7 @@ export function InstallHelp() {
       ) : (
         <p>This browser cannot install apps. Test Simulator still works here in a normal tab. For the best experience use Chrome or Edge on a laptop.</p>
       )}
-      <p className="mt-1 text-gray-700">Installed, it opens in its own window, works offline, and the browser is much less likely to clear its storage.</p>
+      <p className="mt-2 text-gray-700">Installed, it opens in its own window, works offline, and the browser is much less likely to clear its storage.</p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { FolderPicker } from '../ui/FolderPicker';
 import { db } from '../db';
 import type { Exam, PageText, Question } from '../types';
 import { regrade } from '../lib/attempt';
@@ -95,7 +96,7 @@ export function KeyCheck({ examId }: { examId: string }) {
           Exam name <input className="field ml-1 w-72" value={exam.name} onChange={(e) => { setExam({ ...exam, name: e.target.value }); setDirty(true); }} data-testid="key-exam-name" />
         </label>
         <label>
-          Subject <input className="field ml-1 w-40" value={exam.subject} onChange={(e) => { setExam({ ...exam, subject: e.target.value }); setDirty(true); }} />
+          Folder <FolderPicker value={exam.subject ?? ''} onChange={(v) => { setExam({ ...exam, subject: v }); setDirty(true); }} testId="key-folder" />
         </label>
       </div>
       <div className="mb-2 border border-gray-400 bg-gray-50 p-2 text-sm" data-testid="key-summary">

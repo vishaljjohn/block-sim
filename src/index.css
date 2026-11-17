@@ -13,10 +13,10 @@ html.layout-default {
   --bar-dark: 17 24 39;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 }
-html.layout-default .btn,
-html.layout-default .btn-primary,
-html.layout-default .btn-danger,
-html.layout-default .field {
+html.layout-default .board .btn,
+html.layout-default .board .btn-primary,
+html.layout-default .board .btn-danger,
+html.layout-default .board .field {
   border-radius: 6px;
 }
 html.layout-default .status-font {
@@ -101,4 +101,395 @@ button {
 /* bold: thicken the dark strokes of the question page image */
 html.bold-text .page-canvas {
   filter: url(#bs-bold);
+}
+
+/* ───────────────────────── App chrome (everything outside the exam screen) ─────────────────────────
+   The exam screen keeps the plain board-style look above. Library, import, results, settings and help use this
+   design system: one font, tokens for color, soft surfaces. Dark mode here uses real dark colors (no inversion). */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+.app {
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --line: #e3e8f0;
+  --line-strong: #cbd5e1;
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #64748b;
+  --brand: #2f5be7;
+  --brand-ink: #1e3a8a;
+  --brand-soft: #eef3ff;
+  --good: #16a34a;
+  --bad: #dc2626;
+  --warn: #b45309;
+  --shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 2px 6px rgb(15 23 42 / 0.06), 0 18px 48px rgb(15 23 42 / 0.12);
+  --font: 'Inter Variable', ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: var(--font);
+  font-feature-settings: 'cv11', 'ss01';
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+html.dark .app {
+  --bg: #0b1120;
+  --surface: #111a2e;
+  --surface-2: #0f172a;
+  --line: #22304a;
+  --line-strong: #334462;
+  --ink: #e7ecf5;
+  --ink-2: #b4c0d4;
+  --ink-3: #8a98b0;
+  --brand: #6b8cff;
+  --brand-ink: #c7d4ff;
+  --brand-soft: #1a2647;
+  --good: #34d399;
+  --bad: #f87171;
+  --warn: #fbbf24;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.25);
+  --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.35), 0 24px 60px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}
+/* inversion is for the exam screen only */
+html.dark:not(.in-board) {
+  filter: none;
+  background: #0b1120;
+}
+html.dark:not(.in-board) .keep-colors {
+  filter: none;
+}
+html.dark:not(.in-board) body {
+  background: #0b1120;
+}
+
+.app .btn,
+.app .btn-primary,
+.app .btn-danger {
+  gap: 0.375rem;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.app .btn {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 1px 1px rgb(15 23 42 / 0.04);
+}
+.app .btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--ink-3);
+}
+.app .btn-primary {
+  background: linear-gradient(180deg, #3b6cf6, #2f5be7);
+  color: #fff;
+  border: 1px solid #2a50cf;
+  box-shadow: 0 1px 2px rgb(47 91 231 / 0.25), inset 0 1px 0 rgb(255 255 255 / 0.15);
+}
+.app .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3362f0, #2449c9);
+}
+.app .btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #b91c1c;
+}
+.app .btn:active:not(:disabled),
+.app .btn-primary:active:not(:disabled),
+.app .btn-danger:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.app .btn:disabled,
+.app .btn-primary:disabled,
+.app .btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.app .field {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  padding: 0.45rem 0.7rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.app .field:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgb(47 91 231 / 0.18);
+}
+.app :focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.app .panel,
+.app .card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.app table {
+  background: var(--surface);
+  border-color: var(--line) !important;
+  border-radius: 12px;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  overflow: hidden;
+}
+.app .th {
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.app .td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.55rem 0.75rem;
+}
+.app tbody tr:last-child .td {
+  border-bottom: 0;
+}
+.app .link {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 500;
+}
+.app .link:hover {
+  text-decoration: underline;
+}
+.app code {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 0.3rem;
+  font-size: 0.85em;
+}
+.app input[type='checkbox'],
+.app input[type='radio'] {
+  accent-color: var(--brand);
+}
+.app details {
+  background: var(--surface);
+  border-color: var(--line) !important;
+  border-radius: 12px;
+}
+.app details > summary {
+  list-style-position: outside;
+}
+
+/* the common Tailwind colors used across pages, mapped to the tokens (so dark mode just works) */
+.app .bg-white,
+.app .bg-white\/95 {
+  background-color: var(--surface);
+}
+.app .bg-gray-50,
+.app .bg-gray-100 {
+  background-color: var(--surface-2);
+}
+.app .border-gray-100,
+.app .border-gray-200,
+.app .border-gray-300,
+.app .border-gray-400 {
+  border-color: var(--line);
+}
+.app .border-gray-500,
+.app .border-gray-600 {
+  border-color: var(--line-strong);
+}
+.app .text-gray-500,
+.app .text-gray-600 {
+  color: var(--ink-3);
+}
+.app .text-gray-700,
+.app .text-gray-800 {
+  color: var(--ink-2);
+}
+.app .text-black {
+  color: var(--ink);
+}
+.app .text-navy {
+  color: var(--brand);
+}
+.app .bg-blue-50 {
+  background-color: var(--brand-soft);
+  border-color: transparent;
+}
+html.dark .app .bg-yellow-50,
+html.dark .app .bg-amber-100,
+html.dark .app .bg-yellow-100 {
+  background-color: #2a2110;
+  color: #fde68a;
+}
+html.dark .app .bg-red-50 {
+  background-color: #2b1316;
+}
+html.dark .app .text-red-700 {
+  color: #f87171;
+}
+html.dark .app .text-green-700,
+html.dark .app .text-green-800 {
+  color: #34d399;
+}
+html.dark .app .text-amber-700,
+html.dark .app .text-amber-800 {
+  color: #fbbf24;
+}
+html.dark .app .bg-gray-200 {
+  background-color: #22304a;
+}
+html.dark .app canvas.page-canvas {
+  /* PDF pages shown on app pages (editor, previews) stay paper-white */
+  filter: none;
+}
+
+/* rounded alerts: any bordered tinted box */
+.app .bg-blue-50,
+.app .bg-yellow-50,
+.app .bg-red-50 {
+  border-radius: 12px;
+}
+
+@keyframes app-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.app main > * {
+  animation: app-in 0.25s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app main > *,
+  .app .btn,
+  .app .btn-primary {
+    animation: none;
+    transition: none;
+  }
+}
+
+.app .btn-sm {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+.app .btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-2);
+}
+.app .btn-quiet:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+.app .eyebrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.app .muted {
+  color: var(--ink-3);
+}
+.app .card-hover {
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+}
+.app .card-hover:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--line-strong);
+}
+/* selectable option tiles: a label holding a radio/checkbox */
+.app .choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+.app .choice:hover {
+  border-color: var(--line-strong);
+}
+.app .choice:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+.app .choice input[type='radio'],
+.app .choice input[type='checkbox'] {
+  margin-top: 0.2rem;
+}
+.app .seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.app .seg > * {
+  border-radius: 8px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.app .seg > [aria-selected='true'],
+.app .seg > .on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
+}
+.app .card > h2:first-child {
+  margin-top: 0;
+}
+.app .border-navy {
+  border-color: var(--brand);
+}
+.app input[type='file'] {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.app input[type='file']::file-selector-button {
+  margin-right: 0.6rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.app input[type='file']::file-selector-button:hover {
+  background: var(--surface-2);
+}
+.app select.field {
+  padding-right: 1.8rem;
+}
+@media (max-width: 640px) {
+  .app header nav a {
+    padding: 0.3rem 0.55rem;
+  }
 }

@@ -49,6 +49,8 @@ export interface PageLines {
   colRight: number[];
   /** content area of the page (auto-crop), if known */
   content: Rect | null;
+  /** share of the page height with ink (pictures count), if known */
+  ink?: number;
 }
 
 export function pageLines(page: number, words: Word[], content: Rect | null = null): PageLines {
@@ -365,7 +367,9 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
     if (ps.length > 1) multi = true;
     const top = p.content?.y ?? 0;
     const bottom = p.content ? p.content.y + p.content.h : 1;
-    const ncols = Math.max(1, p.colLeft.length);
+    // one question starting at the left of the page: use the whole width (labels in a picture beside the text, such
+    // as ECG leads, can look like extra columns)
+    const ncols = ps.length === 1 && ps[0].column === 0 ? 1 : Math.max(1, p.colLeft.length);
     const colRect = (c: number, y0: number, y1: number): Rect => {
       // whole width when the page has one column, else that column's extent
       if (ncols === 1) {
@@ -378,7 +382,8 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
       return { x: l, y: y0, w: r - l, h: y1 - y0 };
     };
     if (!ps.length) {
-      if (st.cur && p.lines.length >= 1) st.cur.segments.push({ page: p.page, rect: undefined });
+      // a page with no new question continues the current one, also when it holds only a picture (an x-ray page)
+      if (st.cur && (p.lines.length >= 1 || (p.ink ?? 0) > 0.05)) st.cur.segments.push({ page: p.page, rect: undefined });
       continue;
     }
     for (let c = 0; c < ncols; c++) {
@@ -388,7 +393,11 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
       const first = inCol[0];
       // text above the first new question continues the previous one; pictures with no text above it belong to
       // the new question (exhibits are often placed above the stem) and must never be cut off
-      const textAbove = first ? p.lines.filter((l) => (ncols === 1 || l.column === c) && l.y + l.h <= first.y - 0.004) : [];
+      // (labels inside a picture, like ECG leads or "R" / "L", are not text of the previous question: that needs a
+      // sentence, a question mark or an answer choice)
+      const textAbove = first
+        ? p.lines.filter((l) => (ncols === 1 || l.column === c) && l.y + l.h <= first.y - 0.004).filter((l, _, all) => all.length > 6 || l.text.trim().split(/\s+/).length >= 5 || /\?\s*$/.test(l.text) || !!matchChoiceLabel(l.text))
+        : [];
       if (st.cur && (!first || textAbove.length > 0)) {
         const y1 = first ? first.y - PAD : bottom;
         if (y1 - colTop > 0.01) st.cur.segments.push({ page: p.page, rect: clampRect(colRect(c, Math.max(top, colTop - PAD), y1)) });
@@ -408,7 +417,8 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
     for (const s of q.segments) {
       const p = byPage.get(s.page);
       if (!s.rect || !p) continue;
-      const onlyThis = (pageStarts.get(s.page)?.length ?? 0) <= 1 && p.colLeft.length <= 1;
+      const starts = pageStarts.get(s.page) ?? [];
+      const onlyThis = starts.length <= 1 && (p.colLeft.length <= 1 || starts.every((x) => x.column === 0));
       const startsAtTop = s.rect.y <= (p.content?.y ?? 0) + 0.05 || p.lines.every((l) => l.y >= s.rect!.y - 0.01);
       const reachesBottom = s.rect.y + s.rect.h >= (p.content ? p.content.y + p.content.h : 1) - 0.01;
       if (onlyThis && startsAtTop && reachesBottom) s.rect = undefined;
@@ -481,7 +491,7 @@ export function linesForSegment(p: PageLines, r: Rect | undefined): Line[] {
  * Safety net: nothing visible may be dropped. Any band of ink on a page that no question area covers is added
  * to the question just below it (or, at the bottom of the page, the one above it).
  */
-export function coverInk(questions: { segments: { page: number; rect?: Rect }[]; areaManual?: boolean }[], pages: { page: number; ink?: [number, number][]; autoCrop: Rect | null }[]): void {
+export function coverInk(questions: { segments: { page: number; rect?: Rect }[]; areaManual?: boolean }[], pages: { page: number; ink?: number[][]; autoCrop: Rect | null }[]): void {
   for (const p of pages) {
     if (!p.ink?.length) continue;
     const all = questions.flatMap((q) => q.segments.filter((s) => s.page === p.page));
@@ -502,6 +512,22 @@ export function coverInk(questions: { segments: { page: number; rect?: Rect }[];
       }
       const above = segs.filter((s) => s.rect!.y < a).sort((x, y) => y.rect!.y + y.rect!.h - (x.rect!.y + x.rect!.h))[0];
       if (above) above.rect!.h = Math.min(1, b + 0.006) - above.rect!.y;
+    }
+    // sideways: a picture beside the text (left or right of it) belongs to the question next to it, unless
+    // that would reach into another question's area (two questions side by side)
+    for (const band of p.ink) {
+      if (band.length < 4) continue;
+      const [a, b, xa, xb] = band as [number, number, number, number];
+      for (const s of segs) {
+        const r = s.rect!;
+        const overlap = Math.min(b, r.y + r.h) - Math.max(a, r.y);
+        if (overlap < (b - a) * 0.5 || (xa >= r.x - 0.004 && xb <= r.x + r.w + 0.004)) continue;
+        const x0 = Math.min(r.x, Math.max(0, xa - 0.006));
+        const x1 = Math.max(r.x + r.w, Math.min(1, xb + 0.006));
+        const grown = { x: x0, y: r.y, w: x1 - x0, h: r.h };
+        const clash = all.some((o) => o !== s && o.rect && o.rect.x < grown.x + grown.w && o.rect.x + o.rect.w > grown.x && o.rect.y < grown.y + grown.h && o.rect.y + o.rect.h > grown.y && !(o.rect.x < r.x + r.w && o.rect.x + o.rect.w > r.x && o.rect.y < r.y + r.h && o.rect.y + o.rect.h > r.y));
+        if (!clash) s.rect = grown;
+      }
     }
   }
 }

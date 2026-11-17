@@ -140,6 +140,8 @@ export function App() {
   else screen = <Home />;
 
   const name = route.parts.slice(0, 2).join('/') || 'home';
+  // dark mode inverts only the exam screen; the rest of the app has real dark colors
+  document.documentElement.classList.toggle('in-board', bare);
   return (
     <>
       {/* "Bold" display setting: thickens dark strokes in page images */}
@@ -157,7 +159,7 @@ export function App() {
         </div>
       )}
       {bare ? (
-        <div className="h-full">
+        <div className="board h-full">
           <ErrorBoundary name={name}>{screen}</ErrorBoundary>
         </div>
       ) : (

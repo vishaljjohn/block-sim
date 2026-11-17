@@ -60,3 +60,21 @@ Reasonable choices made without asking, with the reason.
   ambiguous, the layout (detected vs. N whole pages per question) closest to that count is used.
 - **Clock** ticks from a tiny worker so background tabs (throttled to ~1/min) are not mistaken for sleep.
 - **Release flow**: new work goes to `beta` first; `main` (stable) only on "promote to stable".
+
+### Pictures are never trimmed away (page version 3)
+- The automatic trim tells toolbars from pictures by shape, not by file: a toolbar row is almost all one color with
+  little white; a dark picture sits on white. Runs of "bar" rows taller than 10% (16% at an edge) and runs of bar
+  columns wider than 6% (20% at an edge) are pictures. After trimming, any picture-sized gray content left outside
+  is pulled back in.
+- Question areas: labels inside a picture above a question (ECG leads, "R"/"L") do not make that picture part of the
+  previous question; pages with only a picture continue the current question; a picture beside the text widens the
+  question area unless that would reach into another question beside it.
+- Older imports are re-checked in the background (page version 3). Trims and areas only ever grow, so nothing that
+  was visible disappears.
+- Checked locally against every private PDF with an independent renderer that reports any gray/dark content no
+  question shows (script kept outside the repo, since it reads private files).
+
+### Questions from Word, text or pasted text
+- Turned into an exam PDF in the browser (pdf-lib + bundled Liberation Sans for Unicode; mammoth for .docx), so
+  the whole PDF pipeline (layout, choices, highlighting, inline "Answer: C" keys) applies unchanged. Each numbered
+  question starts a page, together with any pictures directly above it. Nothing is uploaded.

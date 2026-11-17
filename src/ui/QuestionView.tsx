@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AttemptItem, ChoiceRegion, Exam, Highlight, PageText, Question, Rect, Segment } from '../types';
 import type { PdfDoc } from '../lib/pdf';
 import { segmentRect, usesChoiceRegions } from '../lib/layout';
-import { addWordRange, boxFromDrag, charAt, highlightAt, rectsForRange, removeHighlight, wordAt } from '../lib/highlights';
+import { addWordRange, boxFromDrag, charAt, choiceWords, highlightAt, readingOrder, rectsForRange, removeHighlight, wordAt, wordsBetween } from '../lib/highlights';
 import { uid } from '../db';
 import { PageView, type PageApi } from './PageView';
 import { ImageZoom } from './ImageZoom';
@@ -132,7 +132,10 @@ export function QuestionView(p: QuestionViewProps) {
   const blockedWords = (page: number): Set<number> => {
     const out = new Set<number>();
     const words = texts.get(page)?.words;
-    if (!words || !usesChoiceRegions(exam, question)) return out;
+    if (!words) return out;
+    // the choices as read from the text (works with bubbles too)
+    for (const seg of question.segments.filter((g) => g.page === page)) for (const i of choiceWords(words, segmentRect(exam, seg, texts.get(page)))) out.add(i);
+    if (!usesChoiceRegions(exam, question)) return out;
     const cs = (question.choices ?? []).filter((c) => c.page === page);
     words.forEach((w, i) => {
       const cx = w.x + w.w / 2;
@@ -145,16 +148,18 @@ export function QuestionView(p: QuestionViewProps) {
   const clampSel = (page: number, w0: number, c0: number, w1: number, c1: number) => {
     const blocked = blockedWords(page);
     if (blocked.has(w0)) return null;
-    const dir = w1 >= w0 ? 1 : -1;
+    const words = texts.get(page)?.words ?? [];
+    const path = words.length ? wordsBetween(words, w0, w1) : [w0];
+    const fwd = path.length < 2 || path[path.length - 1] === w1;
     let end = w0;
     let endC = c1;
-    for (let i = w0; dir > 0 ? i <= w1 : i >= w1; i += dir) {
+    for (const i of path) {
       if (blocked.has(i)) {
-        endC = dir > 0 ? Infinity : 0;
+        endC = fwd ? Infinity : 0;
         break;
       }
       end = i;
-      endC = i === w1 ? c1 : dir > 0 ? Infinity : 0;
+      endC = i === w1 ? c1 : fwd ? Infinity : 0;
     }
     return { a: { w: w0, c: c0 }, b: { w: end, c: endC } };
   };
@@ -166,6 +171,9 @@ export function QuestionView(p: QuestionViewProps) {
       // a drag left-to-right starts at its first character; right-to-left the other way round
       return p.onHighlights!(addWordRange(highlights, sel.page, r.a, r.b, uid('h'), color, words));
     }
+    // free boxes only on pages with no readable text (a picture-only page); otherwise a drag over blank space or a
+    // picture would paint a block over the page
+    if (words && words.filter((w) => w.t.trim()).length >= 5) return;
     const b = boxFromDrag(sel.page, sel.x0, sel.y0, sel.x1, sel.y1, uid('h'), color);
     if (b) p.onHighlights!([...highlights, b]);
   };
@@ -321,7 +329,8 @@ export function QuestionView(p: QuestionViewProps) {
             {(api) => {
               apiRef = api;
               const words = text?.words;
-              const rectsOf = (h: Highlight): Rect[] => (h.kind === 'box' ? [h] : words ? rectsForRange(words, h.start, h.end, h.sc, h.ec) : []);
+              const blocked = blockedWords(seg.page);
+              const rectsOf = (h: Highlight): Rect[] => (h.kind === 'box' ? [h] : words ? rectsForRange(words, h.start, h.end, h.sc, h.ec, blocked) : []);
               const sel = drag && drag.seg === i && drag.moved ? drag : pending && pending.seg === i ? { ...pending, moved: true } : null;
               const live: Rect[] =
                 sel && canMark
@@ -329,10 +338,13 @@ export function QuestionView(p: QuestionViewProps) {
                     ? (() => {
                         const r = clampSel(seg.page, sel.w0, sel.c0 ?? 0, sel.w1, sel.c1 ?? Infinity);
                         if (!r) return [];
-                        const [x0, x1] = r.a.w < r.b.w || (r.a.w === r.b.w && r.a.c <= r.b.c) ? [r.a, r.b] : [r.b, r.a];
+                        const rk = readingOrder(words).rank;
+                        const [x0, x1] = rk[r.a.w] < rk[r.b.w] || (r.a.w === r.b.w && r.a.c <= r.b.c) ? [r.a, r.b] : [r.b, r.a];
                         return rectsForRange(words, x0.w, x1.w, x0.c || undefined, x1.c === Infinity ? undefined : Math.max(x1.c, x0.w === x1.w ? x0.c + 1 : 1));
                       })()
-                    : [{ x: Math.min(sel.x0, sel.x1), y: Math.min(sel.y0, sel.y1), w: Math.abs(sel.x1 - sel.x0), h: Math.abs(sel.y1 - sel.y0) }]
+                    : words && words.filter((w) => w.t.trim()).length >= 5
+                      ? []
+                      : [{ x: Math.min(sel.x0, sel.x1), y: Math.min(sel.y0, sel.y1), w: Math.abs(sel.x1 - sel.x0), h: Math.abs(sel.y1 - sel.y0) }]
                   : [];
               return (
                 <>

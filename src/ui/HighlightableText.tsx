@@ -62,11 +62,12 @@ export function HighlightableText({ text, highlights, color, onChange, testId }:
   upRef.current = onUp;
   useEffect(() => {
     const h = () => upRef.current();
-    document.addEventListener('mouseup', h);
-    document.addEventListener('touchend', h);
+    // capture phase: runs before other handlers that may clear the selection
+    document.addEventListener('mouseup', h, true);
+    document.addEventListener('touchend', h, true);
     return () => {
-      document.removeEventListener('mouseup', h);
-      document.removeEventListener('touchend', h);
+      document.removeEventListener('mouseup', h, true);
+      document.removeEventListener('touchend', h, true);
     };
   }, []);
   const segments = (p: { start: number; text: string }) => {

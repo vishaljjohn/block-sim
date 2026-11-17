@@ -10,7 +10,6 @@ import { getSettings, wipeEverything } from '../lib/store';
 import { fmtDateTime, useLive } from '../ui/hooks';
 import { H1, H2 } from '../ui/Shell';
 import { Modal } from '../ui/panels';
-import { DisplaySettings } from '../ui/DisplaySettings';
 import { backupFileName, useFolderStatus } from './Home';
 
 function fmtBytes(n: number | undefined): string {
@@ -52,14 +51,11 @@ export function SettingsPage() {
 
   return (
     <div data-testid="settings">
+      <div className="eyebrow mb-1">Preferences and data</div>
       <H1>Settings</H1>
-      {msg && <div className="mb-3 border border-gray-500 bg-gray-50 p-2 text-sm" role="status" data-testid="settings-msg">{msg}</div>}
+      {msg && <div className="mb-4 rounded-xl border border-gray-300 bg-blue-50 p-3 text-sm" role="status" data-testid="settings-msg">{msg}</div>}
 
-      <H2>Display</H2>
-      <div className="max-w-md">
-        <DisplaySettings />
-      </div>
-
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>Data folder (automatic saving)</H2>
       <div className="text-sm" data-testid="folder-section">
         {!folder.supported ? (
@@ -90,6 +86,8 @@ export function SettingsPage() {
         )}
       </div>
 
+      </section>
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>Backup and restore</H2>
       <div className="text-sm">
         <p>Last backup: {settings?.lastBackupAt ? fmtDateTime(settings.lastBackupAt) : 'never'}. A backup is one file with every exam, PDF, attempt and note.</p>
@@ -142,6 +140,8 @@ export function SettingsPage() {
         <p className="mt-2 text-gray-700">Restoring never deletes anything: it merges.</p>
       </div>
 
+      </section>
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>Automatic snapshots</H2>
       <div className="text-sm">
         <p>Test Simulator keeps the last 5 automatic safety copies of your history (answers, notes, keys; not the PDFs).</p>
@@ -179,6 +179,8 @@ export function SettingsPage() {
         )}
       </div>
 
+      </section>
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>Storage</H2>
       <div className="text-sm" data-testid="storage-usage">
         <p>
@@ -187,9 +189,13 @@ export function SettingsPage() {
         <p>Protected from automatic clean-up by the browser: <b>{persisted == null ? 'unknown' : persisted ? 'yes' : 'not yet'}</b>{persisted === false && ' (installing the app or using it regularly makes the browser grant this)'}.</p>
       </div>
 
+      </section>
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>Demo exam</H2>
       <button className="btn" onClick={async () => setMsg((await ensureDemo(true)) ? 'Demo exam added to the Library.' : 'The demo exam is already in the Library.')}>Add the demo exam again</button>
 
+      </section>
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>About and troubleshooting</H2>
       <div className="text-sm">
         <p data-testid="app-version">
@@ -204,8 +210,12 @@ export function SettingsPage() {
         <p className="mt-1 text-gray-700">Debug info contains the version, browser, settings and error log. It never contains question content or PDFs.</p>
       </div>
 
+      </section>
+      <section className="card mb-4 p-5 sm:p-6">
       <H2>Delete everything</H2>
       <button className="btn-danger" onClick={() => { setWipe(true); setWipeText(''); }} data-testid="wipe">Delete all data on this device…</button>
+
+      </section>
 
       {wipe && (
         <Modal title="Delete everything?" onClose={() => setWipe(false)}>

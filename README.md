@@ -30,13 +30,15 @@ No folder (Safari, iPad, or you skipped it)? Your history lives in the browser. 
 
 ### 3. Import an exam
 **Library → + Import a PDF exam**.
-1. Choose the question PDF.
+1. Choose the questions: a **PDF**, a **Word or text file** (.docx, .txt), or **Paste text**. Word and text
+   questions are turned into exam pages on your computer; number the questions (1., 2.) and letter the choices
+   (A), B)). An `Answer: C` line after a question is used as its answer, with any text after it as the explanation.
 2. Layout: leave **Work it out for me** (it reads question numbers on the pages). If your PDF is exactly N pages
    per question, choose **Fixed** instead. You can also set the first question page and pages to skip.
 3. Answer key: a separate PDF; the end of the same PDF (type the page where the key starts); after each question
    (hidden while you take the exam); **paste it** (`1 C, 2 A, 3 B…`, `1. C`, or one letter per line all work); or
    no key yet (type the answers on the next screen). Keys that mark the answer only with a highlight work too.
-4. Optional: type a **Folder** (Surgery, OBGYN, Internal Medicine…) to sort it in the Library.
+4. Optional: pick a **Folder** (Surgery, OBGYN, Internal Medicine…) or choose **New folder…** and type a name.
 5. Click **Continue**.
 
 **A whole folder at once:** **Import → A whole folder of exams**. Make one folder with a subfolder per subject, put
@@ -54,11 +56,11 @@ When it looks right, click **Key looks right: save** (you land on the exam's pag
 the key also re-grades your old attempts.
 
 ### 5. Take a block
-**New attempt** → choose the questions (all, a range, random N, missed only or marked only), the order and
-the mode:
-- **Exam**: timed (90 s per question by default), full screen, answers locked until the end.
-- **Tutor**: submit each answer to see the correct answer and explanation right away.
-- **Untimed**: like Exam without a clock.
+**New attempt** → choose the questions (all, a range, random N, missed only or marked only), the order, and two
+independent choices:
+- **Test mode** (answers and explanations at the end, like the real exam) or **Tutor mode** (answer and explanation
+  after each question).
+- **Timed** (90 s per question by default; Test + Timed opens full screen) or **Untimed**.
 
 Presets: 40 questions / 60 minutes, or shelf-style (110 questions in 4 blocks, 2 h 45 min, with break screens).
 
@@ -70,14 +72,15 @@ In the block:
 - **Pictures** (photos, ECGs, x-rays): click the picture or its **Zoom** button to pop it out; use − / + (or the − and + keys) to zoom, drag the title bar to move it.
 - **Lab Values** (L), **Calculator** (C), **Notes**: top right. Esc closes them.
 - **← / →** or **P / N**: previous / next. Letters pick answer choices first (on a question with choices A–E, **C** picks choice C); to use a shortcut whose letter is also a choice, hold **Alt/Option** (Alt+C opens the Calculator).
-- **Clock** (bottom): click it to switch Timed / Tutor / Untimed or add time. In Tutor, **Proceed to Next Item**
-  appears under the choices after you submit.
+- **Clock** (bottom, shows the current mode): click it to switch Test / Tutor and Timed / Untimed, add or take away
+  5–30 minutes, or type any number of minutes (+7, -3). In Tutor, **Proceed to Next Item** appears under the choices.
+- **Item box** (top left): click it to hide or show the question list. **Full Screen** sits next to Lab Values.
 - **Lab Values** opens full height on the right; the search highlights matches, and **SI** adds a column.
 - **Pause** hides the question and stops the clock. If your computer sleeps or you close the window, the clock
   stops at that moment and **Resume block** brings you back exactly where you were.
 - **Review** (bottom right) shows a grid of answered / unanswered / marked questions with **Review Marked** and
   **Review Incomplete**; **End Block** shows the same grid and then asks you to confirm.
-- **Settings** (gear, top right): light/dark, text size S–XL, bold, Default or Board-style look, and highlighting
+- **Settings** (gear, top right, only during a block): light/dark, text size S–XL, bold, Default or Board-style look, and highlighting
   (**Quick**: dragging highlights at once; **Manual**: drag, then pick a color) with a default color.
 - **Strike out** a choice with the **ab** button to its right (or right-click it; long-press on iPad).
   Strike-outs, highlights and notes are kept and shown again when you review the block.

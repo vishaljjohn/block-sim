@@ -12,13 +12,13 @@ export function TimeChart({ times }: { times: { n: number; ms: number; correct: 
       {times.map((t, i) => {
         const h = Math.max(1, (t.ms / max) * H);
         return (
-          <rect key={i} x={i * bw + 1} y={H - h} width={Math.max(1, bw - 2)} height={h} fill={t.blank ? '#9ca3af' : t.correct ? '#15803d' : '#dc2626'}>
+          <rect key={i} x={i * bw + 1} y={H - h} width={Math.max(1, bw - 2)} height={h} fill={t.blank ? '#9ca3af' : t.correct ? '#16a34a' : '#dc2626'}>
             <title>{`Q${t.n}: ${Math.round(t.ms / 1000)} s (${t.blank ? 'blank' : t.correct ? 'correct' : 'incorrect'})`}</title>
           </rect>
         );
       })}
-      <line x1="0" x2={W} y1={H - (avg / max) * H} y2={H - (avg / max) * H} stroke="#1c4973" strokeDasharray="4 3" />
-      <line x1="0" x2={W} y1={H} y2={H} stroke="#333" />
+      <line x1="0" x2={W} y1={H - (avg / max) * H} y2={H - (avg / max) * H} stroke="#2f5be7" strokeDasharray="4 3" />
+      <line x1="0" x2={W} y1={H} y2={H} stroke="currentColor" strokeOpacity="0.4" />
       <text x="0" y={H + 13} fontSize="10">1</text>
       <text x={W} y={H + 13} fontSize="10" textAnchor="end">{times.length}</text>
       <text x={W / 2} y={H + 13} fontSize="10" textAnchor="middle">question (dashed line = average {Math.round(avg / 1000)} s; tallest = {Math.round(max / 1000)} s)</text>
@@ -36,14 +36,14 @@ export function TrendChart({ points }: { points: { label: string; pct: number }[
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, height: 'auto' }} role="img" aria-label="Score trend" data-testid="trend-chart">
       {[0, 50, 100].map((g) => (
         <g key={g}>
-          <line x1="30" x2={W - 10} y1={y(g)} y2={y(g)} stroke="#ddd" />
+          <line x1="30" x2={W - 10} y1={y(g)} y2={y(g)} stroke="currentColor" strokeOpacity="0.12" />
           <text x="26" y={y(g) + 3} fontSize="10" textAnchor="end">{g}%</text>
         </g>
       ))}
-      <polyline fill="none" stroke="#1c4973" strokeWidth="2" points={points.map((p, i) => `${x(i)},${y(p.pct)}`).join(' ')} />
+      <polyline fill="none" stroke="#2f5be7" strokeWidth="2" points={points.map((p, i) => `${x(i)},${y(p.pct)}`).join(' ')} />
       {points.map((p, i) => (
         <g key={i}>
-          <rect x={x(i) - 3} y={y(p.pct) - 3} width="6" height="6" fill="#1c4973">
+          <rect x={x(i) - 3} y={y(p.pct) - 3} width="6" height="6" fill="#2f5be7">
             <title>{`${p.label}: ${Math.round(p.pct)}%`}</title>
           </rect>
           <text x={x(i)} y={y(p.pct) - 7} fontSize="10" textAnchor="middle">{Math.round(p.pct)}%</text>
@@ -75,7 +75,7 @@ export function BucketTable({ buckets, head }: { buckets: Bucket[]; head: string
               <td className="td">{Math.round(pct)}%</td>
               <td className="td">
                 <div className="h-3 w-full border border-gray-400 bg-white">
-                  <div className="h-full" style={{ width: `${pct}%`, background: pct >= 70 ? '#15803d' : pct >= 50 ? '#ca8a04' : '#dc2626' }} />
+                  <div className="h-full" style={{ width: `${pct}%`, background: pct >= 70 ? '#16a34a' : pct >= 50 ? '#ca8a04' : '#dc2626' }} />
                 </div>
               </td>
             </tr>

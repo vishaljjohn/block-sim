@@ -87,7 +87,7 @@ export interface PageText {
   autoCrop: Rect | null;
   conf: number;
   /** vertical bands (page fractions) that contain ink inside the crop: text or pictures */
-  ink?: [number, number][];
+  ink?: number[][];
   /** the page's own radio-button circles, found from the pixels */
   radios?: Rect[];
   /** processing version: pages processed by an older version get the newer extras in the background */

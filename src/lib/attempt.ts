@@ -44,14 +44,14 @@ export function newItem(p: Pick): AttemptItem {
 }
 
 /** Split `total` questions into blocks. */
-export function planBlocks(total: number, mode: Mode, secPerQ: number | null, blocks = 1, totalMs: number | null = null): BlockPlan[] {
+export function planBlocks(total: number, mode: Mode, secPerQ: number | null, blocks = 1, totalMs: number | null = null, timed = mode === 'exam'): BlockPlan[] {
   const n = Math.max(1, Math.min(blocks, total));
   const out: BlockPlan[] = [];
   let left = total;
   for (let i = 0; i < n; i++) {
     const count = Math.ceil(left / (n - i));
     left -= count;
-    const limitMs = mode === 'untimed' || mode === 'tutor' ? null : totalMs != null ? Math.round(totalMs / n) : secPerQ != null ? count * secPerQ * 1000 : null;
+    const limitMs = !timed ? null : totalMs != null ? Math.round(totalMs / n) : secPerQ != null ? count * secPerQ * 1000 : null;
     out.push({ count, limitMs });
   }
   return out;

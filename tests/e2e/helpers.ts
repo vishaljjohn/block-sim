@@ -80,7 +80,6 @@ export async function itemState(page: Page) {
 export async function pick(page: Page, letter: string) {
   const choice = page.getByTestId(`choice-${letter}`);
   const bubble = page.getByTestId(`bubble-${letter}`);
-  await expect(choice.or(bubble).first()).toBeVisible();
-  if (await choice.count()) await choice.click();
-  else await bubble.click();
+  // re-resolved on every retry: bubbles turn into clickable choices when background reading finishes
+  await choice.or(bubble).first().click();
 }

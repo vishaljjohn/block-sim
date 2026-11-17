@@ -22,7 +22,9 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   const [to, setTo] = useState(0);
   const [randomN, setRandomN] = useState(40);
   const [order, setOrder] = useState<'sequential' | 'random'>('sequential');
-  const [mode, setMode] = useState<Mode>(bank ? 'tutor' : 'exam');
+  const [tutor, setTutor] = useState(bank);
+  const [timed, setTimed] = useState(!bank);
+  const mode: Mode = tutor ? 'tutor' : timed ? 'exam' : 'untimed';
   const [preset, setPreset] = useState<Preset>('custom');
   const [secPerQ, setSecPerQ] = useState(DEFAULT_SEC_PER_Q);
   const [blocks, setBlocks] = useState(1);
@@ -67,7 +69,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   const count = Math.min(pool.length, wanted ?? pool.length);
   const nBlocks = preset === 'shelf' ? 4 : preset === 'standard' ? 1 : blocks;
   const sec = preset === 'custom' ? secPerQ : 90;
-  const plan = planBlocks(count, mode, sec, nBlocks);
+  const plan = planBlocks(count, mode, sec, nBlocks, null, timed);
   const totalMs = plan.reduce((s, b) => s + (b.limitMs ?? 0), 0);
   const unkeyed = pool.filter((p) => !p.q.answer).length;
 
@@ -75,7 +77,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     if (!count) return;
     setBusy(true);
     // must be requested synchronously inside the click; never awaited (it can hang or be refused on iPad)
-    if (mode === 'exam' && !document.fullscreenElement) {
+    if (timed && !tutor && !document.fullscreenElement) {
       try {
         void document.documentElement.requestFullscreen?.()?.catch?.(() => {});
       } catch {}
@@ -93,7 +95,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       name,
       picks,
       mode,
-      { secPerQ: mode === 'exam' ? sec : null, confidence: false, preset, order, selection: bank ? 'bank' : sel, breakMinutes: breakMin.trim() ? Math.max(0, parseFloat(breakMin)) : null },
+      { secPerQ: timed ? sec : null, confidence: false, preset, order, selection: bank ? 'bank' : sel, breakMinutes: breakMin.trim() ? Math.max(0, parseFloat(breakMin)) : null },
       plan,
     );
     await saveAttempt(a);
@@ -101,7 +103,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   };
 
   const R = (v: Sel, testId: string, children: React.ReactNode) => (
-    <label className="block" key={v}>
+    <label className="choice items-center" key={v}>
       <input type="radio" name="sel" checked={sel === v} onChange={() => setSel(v)} data-testid={testId} /> {children}
     </label>
   );
@@ -109,12 +111,15 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   return (
     <div data-testid="block-setup">
       <a className="link text-sm" href={bank ? '#/missed' : `#/exam/${examId}`}>← Back</a>
-      <H1>New block: {bank ? 'Quiz me on missed questions' : exam!.name}</H1>
+      <div className="eyebrow mb-1 mt-3">New block</div>
+      <H1>{bank ? 'Quiz me on missed questions' : exam!.name}</H1>
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="min-w-0">
 
       {!bank && (
         <>
           <H2>Questions</H2>
-          <div className="space-y-1 text-sm">
+          <div className="grid gap-2 text-sm sm:grid-cols-2">
             {R('all', 'sel-all', <>All {exam!.questions.length} questions</>)}
             {R('range', 'sel-range', <>
               Range: from
@@ -134,28 +139,32 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       )}
 
       <H2>Order</H2>
-      <div className="flex gap-5 text-sm">
-        <label><input type="radio" name="order" checked={order === 'sequential'} onChange={() => setOrder('sequential')} /> In order</label>
-        <label><input type="radio" name="order" checked={order === 'random'} onChange={() => setOrder('random')} data-testid="order-random" /> Shuffled</label>
+      <div className="grid grid-cols-2 gap-2 text-sm sm:max-w-md">
+        <label className="choice items-center"><input type="radio" name="order" checked={order === 'sequential'} onChange={() => setOrder('sequential')} /> In order</label>
+        <label className="choice items-center"><input type="radio" name="order" checked={order === 'random'} onChange={() => setOrder('random')} data-testid="order-random" /> Shuffled</label>
       </div>
 
       <H2>Mode</H2>
-      <div className="space-y-1 text-sm">
-        <label className="block"><input type="radio" name="mode" checked={mode === 'exam'} onChange={() => setMode('exam')} data-testid="mode-exam" /> <b>Exam</b>: timed. Answers and explanations stay locked until the block ends. Opens full screen.</label>
-        <label className="block"><input type="radio" name="mode" checked={mode === 'tutor'} onChange={() => setMode('tutor')} data-testid="mode-tutor" /> <b>Tutor</b>: submit each answer to see the correct answer and explanation right away. Not timed.</label>
-        <label className="block"><input type="radio" name="mode" checked={mode === 'untimed'} onChange={() => setMode('untimed')} data-testid="mode-untimed" /> <b>Untimed</b>: like Exam, with no clock.</label>
+      <div className="grid gap-2 text-sm md:grid-cols-2">
+        <label className="choice"><input type="radio" name="mode" checked={!tutor} onChange={() => { setTutor(false); setTimed(true); }} data-testid="mode-exam" /> <span><b className="block">Test mode</b><span className="muted">Answers and explanations stay locked until the block ends, like the real exam.</span></span></label>
+        <label className="choice"><input type="radio" name="mode" checked={tutor} onChange={() => setTutor(true)} data-testid="mode-tutor" /> <span><b className="block">Tutor mode</b><span className="muted">See the correct answer and explanation after each question.</span></span></label>
       </div>
+      <div className="mt-2 grid gap-2 text-sm md:grid-cols-2">
+        <label className="choice"><input type="radio" name="timed" checked={timed} onChange={() => setTimed(true)} data-testid="timed-on" /> <span><b className="block">Timed</b><span className="muted">A countdown for each block{!tutor ? '; opens full screen' : ''}.</span></span></label>
+        <label className="choice"><input type="radio" name="timed" checked={!timed} onChange={() => { setTimed(false); }} data-testid="mode-untimed" /> <span><b className="block">Untimed</b><span className="muted">No countdown; your time is still recorded.</span></span></label>
+      </div>
+      <p className="muted mt-2 text-xs">You can switch either one in the middle of a block: click the clock at the bottom of the test screen.</p>
 
       <H2>Length and timing</H2>
-      <div className="space-y-1 text-sm">
-        <label className="block"><input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" /> <b>Custom</b>:
-          <input className="field mx-1 w-16" type="number" min={10} max={3600} value={secPerQ} disabled={mode !== 'exam'} onChange={(e) => { setSecPerQ(Math.max(5, parseInt(e.target.value, 10) || DEFAULT_SEC_PER_Q)); setPreset('custom'); }} data-testid="sec-per-q" aria-label="Seconds per question" />
+      <div className="space-y-2 text-sm">
+        <label className="choice flex-wrap items-center"><input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" /> <b>Custom</b>:
+          <input className="field mx-1 w-16" type="number" min={10} max={3600} value={secPerQ} disabled={!timed} onChange={(e) => { setSecPerQ(Math.max(5, parseInt(e.target.value, 10) || DEFAULT_SEC_PER_Q)); setPreset('custom'); }} data-testid="sec-per-q" aria-label="Seconds per question" />
           seconds per question, in
           <input className="field mx-1 w-14" type="number" min={1} max={20} value={blocks} onChange={(e) => { setBlocks(Math.max(1, parseInt(e.target.value, 10) || 1)); setPreset('custom'); }} data-testid="block-count" aria-label="Number of blocks" />
           block(s)
         </label>
-        <label className="block"><input type="radio" name="preset" checked={preset === 'standard'} onChange={() => setPreset('standard')} data-testid="preset-standard" /> <b>40 questions / 60 minutes</b> (one block)</label>
-        <label className="block"><input type="radio" name="preset" checked={preset === 'shelf'} onChange={() => setPreset('shelf')} data-testid="preset-shelf" /> <b>Shelf-style</b>: 110 questions in 4 blocks, 2 h 45 min total, with a break screen between blocks</label>
+        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'standard'} onChange={() => setPreset('standard')} data-testid="preset-standard" /> <b>40 questions / 60 minutes</b> (one block)</label>
+        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'shelf'} onChange={() => setPreset('shelf')} data-testid="preset-shelf" /> <b>Shelf-style</b>: 110 questions in 4 blocks, 2 h 45 min total, with a break screen between blocks</label>
         {nBlocks > 1 && (
           <label className="block pl-5">
             Break timer (optional):
@@ -164,20 +173,23 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
         )}
       </div>
 
-      <div className="mt-5 border border-gray-400 bg-gray-50 p-3 text-sm" data-testid="setup-summary">
+      </div>
+      <aside className="card sticky top-20 mt-2 p-5 lg:mt-8">
+      <div className="eyebrow mb-2">Summary</div>
+      <div className="text-sm" data-testid="setup-summary">
         <b>{count}</b> question{count === 1 ? '' : 's'}
         {plan.length > 1 && <> in <b>{plan.length}</b> blocks ({plan.map((b) => b.count).join(' + ')})</>}
-        {mode === 'exam' && totalMs > 0 && <> · <b>{fmtDuration(totalMs)}</b> total</>}
+        {timed && totalMs > 0 && <> · <b>{fmtDuration(totalMs)}</b> total</>}
         {presetCount != null && pool.length < presetCount && <span className="ml-2 text-gray-700">(only {pool.length} available, so the time is scaled to match)</span>}
         {presetCount != null && pool.length > presetCount && <span className="ml-2 text-gray-700">({presetCount} picked at random from {pool.length})</span>}
         {unkeyed > 0 && <div className="mt-1 text-red-700">{unkeyed} of these questions have no answer in the key and cannot be graded.</div>}
       </div>
-      <div className="mt-3">
-        <button className="btn-primary px-6 py-2 text-base" disabled={!count || busy} onClick={start} data-testid="start-block">
+      <div className="mt-4">
+        <button className="btn-primary w-full px-6 py-2.5 text-base" disabled={!count || busy} onClick={start} data-testid="start-block">
           Start block
         </button>
         {!count && (
-          <span className="ml-3 text-sm text-red-700">
+          <span className="mt-2 block text-sm text-red-700">
             {bank ? (
               <>
                 No questions chosen. Open <a className="link" href="#/missed">Missed Questions</a>, filter the list, and click “Quiz me on these”.
@@ -187,6 +199,8 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
             )}
           </span>
         )}
+      </div>
+      </aside>
       </div>
     </div>
   );

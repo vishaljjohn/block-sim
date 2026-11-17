@@ -20,14 +20,14 @@ export function Donut({ correct, wrong, blank, size = 120 }: { correct: number; 
   const arc = (n: number, offset: number, color: string) => (n > 0 ? <circle r={r} cx="60" cy="60" fill="none" stroke={color} strokeWidth="12" strokeDasharray={`${(n / total) * c} ${c}`} strokeDashoffset={-offset} transform="rotate(-90 60 60)" /> : null);
   return (
     <svg width={size} height={size} viewBox="0 0 120 120" role="img" aria-label={`${Math.round((correct / total) * 100)}% correct`} data-testid="donut">
-      <circle r={r} cx="60" cy="60" fill="none" stroke="#e5e7eb" strokeWidth="12" />
+      <circle r={r} cx="60" cy="60" fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="12" />
       {arc(correct, 0, '#16a34a')}
       {arc(wrong, (correct / total) * c, '#dc2626')}
       {arc(blank, ((correct + wrong) / total) * c, '#9ca3af')}
-      <text x="60" y="58" textAnchor="middle" fontSize="22" fontWeight="700" fill="#111">
+      <text x="60" y="58" textAnchor="middle" fontSize="22" fontWeight="700" fill="currentColor">
         {Math.round((correct / total) * 100)}%
       </text>
-      <text x="60" y="76" textAnchor="middle" fontSize="10" fill="#555">
+      <text x="60" y="76" textAnchor="middle" fontSize="10" fill="currentColor" opacity="0.65">
         correct
       </text>
     </svg>
