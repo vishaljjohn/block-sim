@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { IS_BETA } from './config';
 import { db } from './db';
 import { startTabGuard, type TabState } from './lib/tabGuard';
 import { getSettings, maybeDailySnapshot, requestPersistence, setReadOnly } from './lib/store';
-import { applyUpdate, registerServiceWorker, useUpdateAvailable } from './lib/sw';
+import { registerServiceWorker } from './lib/sw';
 import { ensureDemo } from './lib/demo';
 import { initFolderSync } from './lib/folder';
 import { resumeBackgroundText } from './lib/analyze';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Shell } from './ui/Shell';
+import { bringInBetaHistory } from './lib/betaMerge';
 import { go, useRoute } from './ui/hooks';
 import { Home } from './pages/Home';
 import { ImportPage } from './pages/Import';
@@ -33,7 +33,6 @@ export function App() {
   const [ready, setReady] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const route = useRoute();
-  const update = useUpdateAvailable();
   useApplyDisplay();
 
   useEffect(() => {
@@ -52,6 +51,8 @@ export function App() {
         void requestPersistence();
         await initFolderSync();
         await ensureDemo();
+        // the retired beta version's exams and history move in here, once
+        await bringInBetaHistory();
         void maybeDailySnapshot();
         // finish reading any pages left over from an earlier session (OCR), in the background
         window.setTimeout(() => resumeBackgroundText(), 1500);
@@ -107,7 +108,6 @@ export function App() {
   if (!ready) return <div className="p-6 text-sm">Loading Test Simulator…</div>;
 
   const [p0, p1, p2] = route.parts;
-  const inBlock = p0 === 'test';
   let screen: React.ReactNode;
   let bare = false;
   let wide = false;
@@ -150,14 +150,6 @@ export function App() {
           <feMorphology operator="erode" radius="0.6" />
         </filter>
       </svg>
-      {update && !inBlock && (
-        <div className="flex items-center justify-center gap-3 border-b border-yellow-600 bg-yellow-100 px-3 py-1.5 text-sm" role="status" data-testid="update-banner">
-          Update available{IS_BETA ? ' (beta)' : ''}.
-          <button className="btn py-0.5" onClick={applyUpdate} data-testid="update-refresh">
-            Refresh
-          </button>
-        </div>
-      )}
       {bare ? (
         <div className="board h-full">
           <ErrorBoundary name={name}>{screen}</ErrorBoundary>

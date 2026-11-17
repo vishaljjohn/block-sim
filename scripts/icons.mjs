@@ -47,9 +47,9 @@ export async function makeIcons(pubDir) {
     path.join(pubDir, 'manifest.webmanifest'),
     JSON.stringify(
       {
-        name: process.env.VITE_CHANNEL === 'beta' ? 'Test Simulator (beta)' : 'Test Simulator',
-        short_name: process.env.VITE_CHANNEL === 'beta' ? 'Test Sim β' : 'Test Simulator',
-        id: process.env.VITE_CHANNEL === 'beta' ? 'block-sim-beta' : 'block-sim',
+        name: 'Test Simulator',
+        short_name: 'Test Simulator',
+        id: 'block-sim',
         description: 'Board-style practice exams from your own PDFs. Everything stays on this device.',
         start_url: './',
         scope: './',

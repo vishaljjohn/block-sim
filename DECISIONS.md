@@ -36,8 +36,7 @@ Reasonable choices made without asking, with the reason.
   to question 1.
 
 ## Release
-- One GitHub Actions workflow builds both branches on every push and publishes a single Pages artifact
-  (`main` at the root, `beta` under `/beta/`), so a push to one channel never removes the other.
+- One GitHub Actions workflow tests and builds `main` on every push and publishes it to GitHub Pages.
 
 ## Later additions
 - **Display settings** (gear in the test screen, and Settings → Display) follow the owner's screenshot: Appearance
@@ -59,7 +58,9 @@ Reasonable choices made without asking, with the reason.
 - **Layout hint**: the key's highest question number tells how many questions to expect; when page text is
   ambiguous, the layout (detected vs. N whole pages per question) closest to that count is used.
 - **Clock** ticks from a tiny worker so background tabs (throttled to ~1/min) are not mistaken for sleep.
-- **Release flow**: new work goes to `beta` first; `main` (stable) only on "promote to stable".
+- **Release flow**: one channel. The beta channel was retired (Nov 2026): its link now redirects to the app and
+  replaces the old beta service worker; on first open the app merges the beta database (`blocksim-beta`) into its
+  own by ID, like a backup restore, and leaves the old storage untouched.
 
 ### Pictures are never trimmed away (page version 3)
 - The automatic trim tells toolbars from pictures by shape, not by file: a toolbar row is almost all one color with
@@ -78,3 +79,9 @@ Reasonable choices made without asking, with the reason.
 - Turned into an exam PDF in the browser (pdf-lib + bundled Liberation Sans for Unicode; mammoth for .docx), so
   the whole PDF pipeline (layout, choices, highlighting, inline "Answer: C" keys) applies unchanged. Each numbered
   question starts a page, together with any pictures directly above it. Nothing is uploaded.
+
+### Always the newest version, no update banner
+- Pages (navigations) are network-first with a 5-second fallback to the saved copy, so opening the app online
+  always shows the latest release; hashed files are cache-first. A new service worker takes over at once
+  (`skipWaiting`) but never reloads a page; the previous version's cache is kept so a page still open from before
+  can finish loading its files. The "Update available / Refresh" banner was removed.

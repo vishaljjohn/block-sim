@@ -11,7 +11,7 @@ import { mergeIntoDb, manifest, paths, type FileSet } from './backup';
 import { mergeReviews, mergeTombstones, type Tombstone } from './merge';
 import { getTombstones, onWrite, type WriteEvent } from './store';
 import { logError } from './errorLog';
-import { IS_BETA, SNAPSHOT_KEEP } from '../config';
+import { SNAPSHOT_KEEP } from '../config';
 
 export interface FolderStatus {
   supported: boolean;
@@ -43,7 +43,7 @@ export function onFolderStatus(fn: () => void): () => void {
 let root: FileSystemDirectoryHandle | null = null;
 /** the folder the user picked when the data lives in a subfolder next to their PDFs (exam PDFs are read from here) */
 let base: FileSystemDirectoryHandle | null = null;
-export const DATA_DIR = IS_BETA ? 'Test Simulator Data (beta)' : 'Test Simulator Data';
+export const DATA_DIR = 'Test Simulator Data';
 
 /** Read a file by its path inside the picked folder ("2 Surgery/5 Q.pdf"). */
 export async function readFromBase(path: string): Promise<ArrayBuffer | null> {

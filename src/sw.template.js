@@ -1,16 +1,16 @@
 /* Test Simulator service worker. Generated at build time; do not edit dist/sw.js by hand. */
-const CHANNEL = "__CHANNEL__";
 const BASE = "__BASE__";
 const BUILD_ID = "__BUILD_ID__";
 const FILES = "__FILES__";
-const PREFIX = 'blocksim-' + CHANNEL + '-';
+// cache names kept from the first version, so old caches are cleaned up on update
+const PREFIX = 'blocksim-stable-';
 const CACHE = PREFIX + BUILD_ID;
 
 function inScope(url) {
   if (url.origin !== self.location.origin) return false;
   if (!url.pathname.startsWith(BASE)) return false;
-  // The stable worker must never touch the beta channel.
-  if (CHANNEL === 'stable' && url.pathname.startsWith(BASE + 'beta/')) return false;
+  // the retired beta link has its own small page that sends people here
+  if (url.pathname.startsWith(BASE + 'beta/')) return false;
   return true;
 }
 
@@ -26,43 +26,59 @@ self.addEventListener('install', (event) => {
       await cache.put(BASE, await cache.match(BASE + 'index.html').then((r) => r.clone()));
     })(),
   );
-  // No skipWaiting here: an update is only applied when the user presses Refresh.
+  // the new version takes over at once; it never reloads a page (an open block keeps running on what it loaded)
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const names = await caches.keys();
-      await Promise.all(names.filter((n) => n.startsWith(PREFIX) && n !== CACHE).map((n) => caches.delete(n)));
+      // keep this version and the one before it: a page still open from before can load the files it needs
+      const mine = (await caches.keys()).filter((n) => n.startsWith(PREFIX));
+      const keep = new Set([CACHE, ...mine.filter((n) => n !== CACHE).slice(-1)]);
+      await Promise.all(mine.filter((n) => !keep.has(n)).map((n) => caches.delete(n)));
       await self.clients.claim();
     })(),
   );
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
-  if (event.data && event.data.type === 'GET_BUILD' && event.ports[0]) event.ports[0].postMessage({ buildId: BUILD_ID, channel: CHANNEL });
+  // pages from before this change still show an "Update available" bar: its Refresh button reloads the page
+  if (event.data && event.data.type === 'SKIP_WAITING' && event.source && 'navigate' in event.source) event.source.navigate(event.source.url).catch(() => {});
+  if (event.data && event.data.type === 'GET_BUILD' && event.ports[0]) event.ports[0].postMessage({ buildId: BUILD_ID });
 });
+
+/** The page itself: always the newest from the internet when online, the saved copy when offline or very slow. */
+async function page(req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const net = await Promise.race([fetch(req, { cache: 'no-cache' }), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 5000))]);
+    if (net && net.ok) return net;
+    throw new Error('bad response');
+  } catch (e) {
+    const shell = (await cache.match(BASE + 'index.html')) || (await caches.match(BASE + 'index.html'));
+    if (shell) return shell;
+    throw e;
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (!inScope(url)) return;
+  if (req.mode === 'navigate') return event.respondWith(page(req));
   event.respondWith(
     (async () => {
-      const cache = await caches.open(CACHE);
-      const hit = (await cache.match(req, { ignoreSearch: true })) || (req.mode === 'navigate' ? await cache.match(BASE + 'index.html') : undefined);
+      // files have content hashes in their names, so a saved copy is always right
+      const hit = await caches.match(req, { ignoreSearch: true });
       if (hit) return hit;
-      try {
-        return await fetch(req);
-      } catch (e) {
-        if (req.mode === 'navigate') {
-          const shell = await cache.match(BASE + 'index.html');
-          if (shell) return shell;
-        }
-        throw e;
+      const res = await fetch(req);
+      if (res.ok && url.origin === self.location.origin) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
       }
+      return res;
     })(),
   );
 });

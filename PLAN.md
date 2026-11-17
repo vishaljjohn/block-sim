@@ -1,12 +1,8 @@
 # Test Simulator: plan and status
 
-## STATUS (2026-11-16, evening)
+## STATUS (2026-11-17)
 
-- Stable `main` = v1.0.0 (Stages A–E) → https://www.vishaljohn.com/block-sim/
-- Beta `beta` = v1.0.0 + image zoom, display settings (theme/size/bold/layout/highlight colors), strike-out
-  buttons, student-test fixes, private-PDF robustness → https://www.vishaljohn.com/block-sim/beta/
-- Waiting on the owner: "promote to stable" → `git checkout main && git merge --ff-only beta && npm version minor
-  && git push origin main --follow-tags`.
+- Live: https://www.vishaljohn.com/block-sim/ (one channel; beta retired, its history merged in on first open).
 - All checks green: lint, 84 unit tests, e2e in Chromium/WebKit/iPad (51), live-site e2e.
 - Private PDFs: results in /private-results (local only).
 
@@ -26,7 +22,7 @@ Possible next steps (not started)
 - Backups are zip files using the same file layout planned for the data folder.
 - Demo PDF and vendor files are generated at build time (`scripts/prepare-assets.mjs`), never committed.
 - Answer key is copied into each attempt item when graded; editing the key re-grades history.
-- Service worker is hand-written (`src/sw.template.js`); stable ignores `/block-sim/beta/`.
+- Service worker is hand-written (`src/sw.template.js`); it leaves the retired `/block-sim/beta/` link alone.
 
 ## Findings on /private-test (121 PDFs, local only)
 - Many question PDFs have a real text layer; many are image-only (need OCR, Stage D).

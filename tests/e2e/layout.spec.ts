@@ -20,6 +20,18 @@ test('layout editor: redraw the question area, draw choices, undo and redo', asy
   await expect(page.getByTestId('layout-editor')).toBeVisible();
   await expect(page.getByTestId('undo')).toBeDisabled();
 
+  // previous / next question, with buttons and arrow keys
+  await expect(page.getByTestId('layout-prev')).toBeDisabled();
+  await page.getByTestId('layout-next').click();
+  await expect(page.getByTestId('layout-current')).toContainText('Question 2');
+  await expect(page.getByTestId('layout-next')).toBeDisabled();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByTestId('layout-current')).toContainText('Question 1');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('layout-current')).toContainText('Question 2');
+  await page.getByTestId('layout-prev').click();
+  await expect(page.getByTestId('layout-current')).toContainText('Question 1');
+
   // question area: locked until unticked, then a drag redraws it for this page only
   const before = (await page.getByTestId('area-box').boundingBox())!;
   await page.getByTestId('lock-area').uncheck();

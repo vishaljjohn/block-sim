@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { APP_VERSION, BUILD_TIME, CHANNEL } from '../config';
+import { APP_VERSION, BUILD_TIME } from '../config';
 import { db } from '../db';
 import { exportBackup, mergeIntoDb, restoreBackup } from '../lib/backup';
 import { downloadBlob, downloadText } from '../lib/csv';
@@ -199,7 +199,7 @@ export function SettingsPage() {
       <H2>About and troubleshooting</H2>
       <div className="text-sm">
         <p data-testid="app-version">
-          Test Simulator version {APP_VERSION} ({CHANNEL}) · built {BUILD_TIME.slice(0, 16).replace('T', ' ')}
+          Test Simulator version {APP_VERSION} · built {BUILD_TIME.slice(0, 16).replace('T', ' ')}
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <button className="btn" data-testid="export-debug" onClick={async () => downloadText(await debugInfo({ settings, counts, folder: { connected: folder.connected, supported: folder.supported } }), 'test-simulator-debug.json', 'application/json')}>

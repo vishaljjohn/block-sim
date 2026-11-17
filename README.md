@@ -5,7 +5,6 @@ board-style test screen. Every attempt is saved, so you can come back weeks or m
 missed.
 
 - **Open it:** https://www.vishaljohn.com/block-sim/
-- **Try new features first (beta):** https://www.vishaljohn.com/block-sim/beta/ (its own separate history)
 - Works best in **Chrome or Edge on a laptop**. Also works in Safari and on iPad (touch).
 - Nothing you load ever leaves your computer. No accounts, no uploads, no tracking. It works offline once opened.
 
@@ -128,8 +127,9 @@ Problems? See **Help** in the app, or use the **Report a bug** link at the botto
 Stack: Vite + React + TypeScript + Tailwind, Dexie (IndexedDB), pdf.js and Tesseract.js bundled locally.
 The app was renamed from Block Sim to Test Simulator; the URL path (`/block-sim/`), the database names and the
 backup format are unchanged on purpose so installed apps, links and everyone's history keep working.
-Hosted on GitHub Pages; `main` → `/block-sim/` (stable), `beta` → `/block-sim/beta/` (labeled BETA, separate
-storage, separate service worker). Rules for working on the code are in `CLAUDE.md`; design choices in `DECISIONS.md`.
+Hosted on GitHub Pages: every push to `main` is tested and published to `/block-sim/`. (An earlier beta channel
+was retired; its old link now sends people to the app, and anything made there is moved into the app on first
+open.) Rules for working on the code are in `CLAUDE.md`; design choices in `DECISIONS.md`.
 
 ```bash
 npm install
@@ -139,28 +139,20 @@ npm test             # unit tests
 npm run build && npm run e2e   # end-to-end tests (Chromium, WebKit, iPad)
 ```
 
-### Ship a change to beta
-```bash
-git checkout beta
-git merge main        # if beta is behind
-# …make the change, run the checks above…
-git push origin beta  # GitHub Actions tests and publishes /block-sim/beta/
-```
-
-### Promote beta to stable
+### Ship a change
 ```bash
 git checkout main
-git merge --ff-only beta
+# …make the change, run the checks above…
 npm version patch     # bumps package.json and creates tag vX.Y.Z
-git push origin main --follow-tags
+git push origin main --follow-tags   # GitHub Actions tests and publishes the live site
 ```
 
-### Roll back stable to the previous release (one command)
+### Roll back to the previous release (one command)
 ```bash
 git checkout main && git reset --hard "$(git describe --tags --abbrev=0 HEAD^)" && git push --force-with-lease origin main
 ```
 This moves `main` back to the previous tag; the workflow rebuilds and republishes it within a few minutes.
-Users see an "Update available" banner and get the old version when they press Refresh. A rollback never changes
+People get the old version the next time they open the app (online). A rollback never changes
 or deletes user data. If the release being rolled back raised the database version (`DB_VERSION` in `src/db.ts`,
 which is called out in its release notes), the older app cannot open the newer database and asks the user to
 update instead; roll back only to a tag with the same `DB_VERSION`.

@@ -1,5 +1,5 @@
 import { strFromU8, strToU8, unzip, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
-import { APP_VERSION, CHANNEL, SCHEMA_VERSION } from '../config';
+import { APP_VERSION, SCHEMA_VERSION } from '../config';
 import { db, migrateAttempt, migrateExam, setMeta } from '../db';
 import type { Attempt, Exam, PageText, ReviewRecord } from '../types';
 import { applyTombstones, betterAttempt, mergeById, mergeReviews, mergeTombstones, type Tombstone } from './merge';
@@ -27,7 +27,7 @@ export const paths = {
 };
 
 export function manifest() {
-  return { app: 'block-sim', schema: SCHEMA_VERSION, version: APP_VERSION, channel: CHANNEL, exportedAt: Date.now() };
+  return { app: 'block-sim', schema: SCHEMA_VERSION, version: APP_VERSION, exportedAt: Date.now() };
 }
 
 export async function collectFiles(opts: { examId?: string; withPdfs?: boolean } = {}): Promise<FileSet> {

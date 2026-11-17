@@ -133,18 +133,6 @@ test('second tab shows "open elsewhere" and can take over', async ({ page, conte
   await p2.close();
 });
 
-test('update banner never shows during a block', async ({ page }) => {
-  await freshStart(page);
-  await page.goto('./#/exam/demo-exam');
-  await startBlock(page, { mode: 'exam' });
-  await page.evaluate(() => (window as unknown as { __blocksimFakeUpdate: () => void }).__blocksimFakeUpdate());
-  await page.waitForTimeout(300);
-  await expect(page.getByTestId('update-banner')).toHaveCount(0);
-  await page.getByTestId('btn-settings').click();
-  await page.getByRole('menuitem', { name: /Save and exit/ }).click();
-  await expect(page.getByTestId('update-banner')).toBeVisible();
-});
-
 test('lab values, calculator, notes and keyboard', async ({ page }) => {
   await freshStart(page);
   await page.goto('./#/exam/demo-exam');
@@ -210,4 +198,24 @@ test('timer: a sleep gap over 60 s auto-pauses at the moment it went away, and r
   const secs = (s: string | null) => s!.split(':').reduce((a, b) => a * 60 + Number(b), 0);
   // nothing was lost while asleep (a second or two of slack for the tick)
   expect(Math.abs(secs(after) - secs(before))).toBeLessThanOrEqual(3);
+});
+
+test('works offline after the first visit; online, the page always comes fresh from the network', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium' || !!process.env.BASE_URL, 'service worker check on the local build');
+  await freshStart(page);
+  await page.goto('./');
+  await page.waitForFunction(async () => !!(await navigator.serviceWorker?.ready));
+  await page.reload();
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  // online: the page is fetched from the network by the service worker
+  const fromNet = page.waitForResponse((r) => r.request().resourceType() === 'document');
+  await page.reload();
+  expect((await fromNet).status()).toBe(200);
+  await expect(page.getByTestId('home')).toBeVisible();
+  // offline: the saved copy opens
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByTestId('home')).toBeVisible();
+  await expect(page.getByTestId('update-banner')).toHaveCount(0);
+  await context.setOffline(false);
 });

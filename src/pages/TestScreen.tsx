@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db, migrateAttempt } from '../db';
-import { IS_BETA, STORAGE_PREFIX } from '../config';
+import { STORAGE_PREFIX } from '../config';
 
 /**
  * Synchronous mirror of the active attempt in localStorage. IndexedDB writes are asynchronous and can be
@@ -615,7 +615,6 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
               </button>
               <div className="status-font hidden min-w-0 truncate text-[14px] lg:block" title={a.name}>
                 {a.name}
-                {IS_BETA && <span className="ml-2 bg-yellow-300 px-1 text-xs font-bold text-black">BETA</span>}
               </div>
             </div>
             <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 lg:gap-3">

@@ -1,4 +1,4 @@
-import { APP_VERSION, BUILD_TIME, CHANNEL, STORAGE_PREFIX } from '../config';
+import { APP_VERSION, BUILD_TIME, STORAGE_PREFIX } from '../config';
 
 const KEY = STORAGE_PREFIX + 'errors';
 
@@ -41,7 +41,6 @@ export async function debugInfo(extra: Record<string, unknown>): Promise<string>
     {
       app: 'Test Simulator',
       version: APP_VERSION,
-      channel: CHANNEL,
       built: BUILD_TIME,
       when: new Date().toISOString(),
       userAgent: navigator.userAgent,

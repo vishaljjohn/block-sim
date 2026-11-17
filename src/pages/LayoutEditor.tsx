@@ -115,9 +115,27 @@ export function LayoutEditor({ examId }: { examId: string }) {
     setMsg('Redone.');
     force((n) => n + 1);
   };
+  /** previous / next question (buttons and the ← → keys) */
+  const stepQ = (d: number) => {
+    const n = exam?.questions.length ?? 1;
+    setSel((i) => Math.min(n - 1, Math.max(0, Math.min(i, n - 1) + d)));
+    setSeg(0);
+    setAreaLocked(true);
+    setChoicesLocked(true);
+    setRedrawStarted(false);
+  };
+  // keep the selected question visible in the list
+  useEffect(() => {
+    document.querySelector(`[data-testid="layout-q-${(exam?.questions[sel]?.number ?? sel + 1)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [sel, exam?.questions.length]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'SELECT') return;
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        stepQ(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) doRedo();
@@ -183,7 +201,18 @@ export function LayoutEditor({ examId }: { examId: string }) {
         {/* page with boxes */}
         <div className="min-w-0 flex-1" ref={colRef}>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            <b>Question {q.number}</b>
+            <span className="flex items-center gap-1">
+              <button className="btn py-0" onClick={() => stepQ(-1)} disabled={sel <= 0} title="Previous question (←)" data-testid="layout-prev">
+                ‹ Previous
+              </button>
+              <b className="px-1" data-testid="layout-current">
+                Question {q.number} <span className="font-normal text-gray-600">of {exam.questions.length}</span>
+              </b>
+              <button className="btn py-0" onClick={() => stepQ(1)} disabled={sel >= exam.questions.length - 1} title="Next question (→)" data-testid="layout-next">
+                Next ›
+              </button>
+            </span>
+            <span className="mx-1 h-5 w-px bg-gray-300" aria-hidden="true" />
             {q.segments.map((g, i) => (
               <button key={i} className={i === seg ? 'btn-primary py-0' : 'btn py-0'} onClick={() => setSeg(i)}>Page {g.page}</button>
             ))}
