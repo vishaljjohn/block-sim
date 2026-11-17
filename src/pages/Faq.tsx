@@ -73,6 +73,10 @@ const QA: { q: string; a: ReactNode }[] = [
     ),
   },
   {
+    q: 'My PDF has the answer and explanation after every question',
+    a: <p>Choose <b>After each question</b> as the answer key when importing. It works with an “Answer: C” line, and also with explanations that repeat the answer choices with the right one shaded. The explanation is hidden while you take the test and shown in review. Very long PDFs (hundreds of pages, or PDFs whose text has to be read from the page images) can take 10–15 minutes to import once; check the few answers left blank on the answer-key screen.</p>,
+  },
+  {
     q: 'Test or tutor mode, timed or untimed',
     a: <p>When you start a block, choose <b>Test mode</b> (answers at the end) or <b>Tutor mode</b> (the answer and explanation after each question, then <b>Proceed to Next Item</b>), and <b>Timed</b> or <b>Untimed</b>; any combination works. During the block, click the clock at the bottom (it shows the current mode) to switch either one, add or take away 5–30 minutes, or type any number of minutes such as +7 or -3.</p>,
   },

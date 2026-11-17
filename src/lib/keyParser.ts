@@ -23,6 +23,8 @@ export interface KeyEntry {
   answerText?: string;
   explanation: string;
   conf: number;
+  /** how many choices the question has, when the key itself shows its choice list */
+  choices?: number;
 }
 
 export interface ParsedKey {

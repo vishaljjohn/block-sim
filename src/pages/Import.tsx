@@ -271,7 +271,7 @@ export function ImportPage() {
               )}
             </label>
             <label className="choice flex-wrap items-center">
-              <input type="radio" name="src" checked={source === 'inline'} onChange={() => setSource('inline')} data-testid="src-inline" /> After each question (for example “Answer: C” under the choices). The answer is hidden while you take the exam.
+              <input type="radio" name="src" checked={source === 'inline'} onChange={() => setSource('inline')} data-testid="src-inline" /> After each question: an “Answer: C” line, or an explanation that repeats the choices with the right one shaded. Answers and explanations are hidden while you take the exam.
             </label>
             <label className="choice flex-wrap items-center">
               <input type="radio" name="src" checked={source === 'paste'} onChange={() => setSource('paste')} data-testid="src-paste" /> I will paste or type it

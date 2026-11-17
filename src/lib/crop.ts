@@ -296,7 +296,10 @@ export function highlightedChoice(px: Pixels, choices: { letter: string; x: numb
         n++;
         const yellow = r > 190 && g > 180 && b < 140 && Math.abs(r - g) < 70;
         const green = g > 150 && r < 170 && b < 170 && g - Math.max(r, b) > 40;
-        if (yellow || green) hit++;
+        // a gray shaded row (tables that mark the answer by shading its cell)
+        const lumi = r * 0.299 + g * 0.587 + b * 0.114;
+        const gray = Math.max(r, g, b) - Math.min(r, g, b) < 24 && lumi >= 105 && lumi <= 222;
+        if (yellow || green || gray) hit++;
       }
     return n ? hit / n : 0;
   });

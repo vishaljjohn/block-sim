@@ -85,3 +85,17 @@ Reasonable choices made without asking, with the reason.
   always shows the latest release; hashed files are cache-first. A new service worker takes over at once
   (`skipWaiting`) but never reloads a page; the previous version's cache is kept so a page still open from before
   can finish loading its files. The "Update available / Refresh" banner was removed.
+
+### Question banks exported with explanations, and scrambled text layers
+- Some PDFs store their text with a scrambled character code (it displays fine but reads as gibberish). Decided
+  once per document from a sample of pages (`isScrambled`: few vowels, symbols inside words); such documents are
+  read with OCR. Checked against all private PDFs: only the scrambled one is flagged.
+- Choices in a table ("A | text"): a run of 3+ lines at one left edge lettered A, B, C… (2+ when continued from the
+  previous page, like E, F) is read as choices. OCR is retried with table lines erased when no choices are found.
+- "After each question" keys also cover explanations that repeat the choice list with the answer shaded: the
+  question ends where its choice texts appear a second time (or a fresh A, B, C run), the explanation is hidden in
+  the test, and the shaded row is read from the pixels (gray as well as yellow/green). Rows OCR missed are placed
+  by the row spacing; look-alike headings are ignored; the list's length sets the choice count, and when fewer
+  choices are clickable than the question has, the bubbles are used so every choice can be picked.
+- A long run of numbers in order (5, 6, 7…) counts as a reliable layout even at ~3 pages per question; when a
+  document numbers its questions, an unnumbered choice list can no longer start an extra question.

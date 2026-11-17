@@ -85,3 +85,39 @@ describe('page trim keeps dark pictures', () => {
     expect(r.y + r.h).toBeGreaterThan(184 / H);
   });
 });
+
+import { hasRealText, isScrambled } from '../../src/lib/pdfWords';
+describe('scrambled text layers', () => {
+  const words = (text: string) => text.split(' ').map((t, i) => ({ t, x: i * 0.05, y: 0.1, w: 0.04, h: 0.015, c: 100 }));
+  it('text stored with a scrambled character code is not used (the page is read with OCR)', () => {
+    const bad = words('2BCM J;NC?HN B;M QAFF >?G;L=;N?> >?JCAG?HN?> G;=OF?M =IHMCMN?HN QCNB PCNCFCAI 5BC=B I@ NB? @IFFIQCHA');
+    expect(isScrambled(bad)).toBe(true);
+    expect(hasRealText(bad)).toBe(false);
+  });
+  it('ordinary text, with numbers and units, is kept', () => {
+    const good = words('This patient has well-demarcated depigmented macules (eg, 38.4 C) consistent with vitiligo; pulse is 90/min, BP 126/77 mm Hg.');
+    expect(isScrambled(good)).toBe(false);
+    expect(hasRealText(good)).toBe(true);
+  });
+});
+
+import { markTableLabels } from '../../src/lib/textLines';
+describe('choices in a table', () => {
+  const L = (text: string, y: number, x = 0.1) => ({ text, idx: [], x, y, w: 0.3, h: 0.015, column: 0, conf: 1 });
+  it('a lettered run (A, B, C…) at one left edge becomes choices; a sentence starting with "A" does not', () => {
+    const lines = [L('A 65-year-old man comes to the office', 0.1, 0.08), L('A Age-related change', 0.3), L('B Destruction of cells', 0.33), L('C Inherited absence', 0.36), L('D Infection', 0.39)];
+    markTableLabels(lines);
+    expect(lines[0].text).toBe('A 65-year-old man comes to the office');
+    expect(lines.slice(1).map((l) => l.text.slice(0, 3))).toEqual(['A) ', 'B) ', 'C) ', 'D) ']);
+  });
+  it('the rest of a list carried onto the next page (E, F) is recognised too', () => {
+    const lines = [L('E Post-inflammatory change', 0.08), L('F Superficial infection', 0.12)];
+    markTableLabels(lines);
+    expect(lines.map((l) => l.text.slice(0, 3))).toEqual(['E) ', 'F) ']);
+  });
+  it('a lone capitalised sentence is left alone', () => {
+    const lines = [L('A woman has a rash', 0.1), L('She also has a fever', 0.13)];
+    markTableLabels(lines);
+    expect(lines[0].text).toBe('A woman has a rash');
+  });
+});

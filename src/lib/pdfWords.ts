@@ -41,7 +41,22 @@ export function itemsToWords(items: unknown[], viewport: { width: number; height
 /** True when a page has a real, usable text layer (not just a watermark or page number). */
 export function hasRealText(words: Word[]): boolean {
   const chars = words.reduce((s, w) => s + w.t.length, 0);
-  return words.length >= 6 && chars >= 30;
+  return words.length >= 6 && chars >= 30 && !isScrambled(words);
+}
+
+/**
+ * Some PDFs store their text with a scrambled character code (it looks right on screen, but the text reads like
+ * "2BCM J;NC?HN"). Such text is useless for finding questions and choices, so those pages are read with OCR.
+ * Real text in any Latin-script language has vowels and few symbols inside words; scrambled text has neither.
+ */
+export function isScrambled(words: Word[]): boolean {
+  const tokens = words.map((w) => w.t.trim()).filter((t) => t.length >= 3 && !/^https?:|www\.|@/i.test(t));
+  if (tokens.length < 8) return false;
+  // a symbol between letters (not - ' . / , : or a digit): "L?F;N?>"
+  const odd = tokens.filter((t) => /[A-Za-z][^A-Za-z0-9\s\-'’.,:/()%+]+[A-Za-z]/.test(t)).length / tokens.length;
+  const letters = tokens.join('').replace(/[^A-Za-z]/g, '');
+  const vowels = letters.replace(/[^aeiouyAEIOUY]/g, '').length / Math.max(1, letters.length);
+  return odd > 0.25 || (letters.length >= 60 && vowels < 0.18);
 }
 
 /** Add OCR words that the PDF's own text layer does not already cover (pages mixing typed text and images). */

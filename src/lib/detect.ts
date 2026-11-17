@@ -243,6 +243,8 @@ export interface DetectedQuestion {
   /** "Answer: C" found after the question */
   inlineAnswer?: string;
   inlineExplanation?: string;
+  /** the answer choices repeated at the start of the explanation, where the right one is marked (shaded) */
+  answerList?: { page: number; choices: ChoiceRegion[] };
 }
 
 export interface LayoutResult {
@@ -300,6 +302,10 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
   type State = { score: number; prev: State | null; starts: Start[]; last: number; qChoices: boolean };
   // qChoices: the current question already showed its answer choices, so a new set of choices means a new question
   let states = new Map<string, State>([['0:1', { score: 0, prev: null, starts: [], last: 0, qChoices: true }]]);
+  // when the questions are numbered, a set of choices with no number (an explanation that repeats the choices)
+  // must not count as a new question; it may still stand in for a number that could not be read
+  const numberedPages = perPage.filter((cs) => cs.some((c) => c.kind === 'num')).length;
+  const choiceStartScore = numberedPages >= Math.max(3, textPages * 0.15) ? 0.3 : 0.8;
   for (let pi = 0; pi < pages.length; pi++) {
     const cands = perPage[pi];
     const pageChoices = cands.some((c) => c.kind === 'choices');
@@ -341,7 +347,7 @@ export function detectLayout(pages: PageLines[], opts: { inlineAnswers?: boolean
       if (hint && hint.n === st.last + 1) keep({ score: st.score + 0.9, prev: st, starts: [{ page: hint.page, column: 0, y: hint.y, n: hint.n, hint: true }], last: hint.n, qChoices: pageChoices });
       // D: a new full set of choices after the current question already had its choices (unnumbered screenshots)
       const ch = cands.find((c) => c.kind === 'choices');
-      if (ch && st.qChoices) keep({ score: st.score + 0.8, prev: st, starts: [{ page: ch.page, column: 0, y: ch.y, n: st.last + 1, hint: true }], last: st.last + 1, qChoices: true });
+      if (ch && st.qChoices) keep({ score: st.score + choiceStartScore, prev: st, starts: [{ page: ch.page, column: 0, y: ch.y, n: st.last + 1, hint: true }], last: st.last + 1, qChoices: true });
     }
     // keep the state space small
     states = new Map([...next.entries()].sort((a, b) => b[1].score - a[1].score).slice(0, 60));
@@ -474,8 +480,131 @@ function applyInlineAnswers(questions: DetectedQuestion[], byPage: Map<number, P
     if (found) {
       q.segments = keep.length ? keep : q.segments.slice(0, 1);
       q.inlineExplanation = expl.join('\n').replace(/\n(?=[a-z])/g, ' ').trim();
+    } else splitAtRepeatedChoices(q, byPage);
+  }
+}
+
+/**
+ * Explanations that start by repeating the answer choices with the right one shaded (no "Answer: C" text): the
+ * question ends where its choice list starts again (A after the first list ran A, B…); that repeated list is kept
+ * so the shading can be read from the page pixels.
+ */
+function splitAtRepeatedChoices(q: DetectedQuestion, byPage: Map<number, PageLines>) {
+  const lines: { s: DetectedSegment; l: Line; p: PageLines }[] = [];
+  for (const s of q.segments) {
+    const p = byPage.get(s.page);
+    // (page furniture at the very top or bottom edge, like a link printed on every page, is not part of it)
+    if (p) for (const l of linesIn(p, s.rect)) if (l.y > 0.035 && l.y + l.h < 0.965) lines.push({ s, l, p });
+  }
+  // the text of a line without its label, table bars or punctuation
+  const norm = (t: string) =>
+    (matchChoiceLabel(t)?.rest ?? t.replace(/^[|[\]>\s]*(?:\(?[A-Z]\)?\s*[|\]]+\s*)?/, ''))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const ns = lines.map((x) => norm(x.l.text));
+  // where the choices appear a second time: two of the next three lines repeat earlier lines
+  let at = -1;
+  for (let i = 1; i < lines.length && at < 0; i++) {
+    const earlier = new Set(ns.slice(0, i).filter((n) => n.length >= 3));
+    if (!earlier.has(ns[i])) continue;
+    const next = ns.slice(i + 1, i + 3).filter((n) => earlier.has(n)).length;
+    if (next >= 1) at = i;
+  }
+  // fallback when the first list was read too poorly to compare: a new A), B), C) run after the question
+  // already showed choices (or asked its "?" question)
+  let byLabel = false;
+  if (at < 0) {
+    const L = (i: number) => (i < lines.length ? matchChoiceLabel(lines[i].l.text)?.letter : undefined);
+    const shown = (i: number) => lines.slice(0, i).some((x) => /\?\s*$/.test(x.l.text) || !!matchChoiceLabel(x.l.text));
+    for (let i = 1; i < lines.length - 2 && at < 0; i++) if (L(i) === 'A' && L(i + 1) === 'B' && L(i + 2) === 'C' && shown(i) && lines.slice(0, i).some((x) => x.s.page !== lines[i].s.page || x.l.y < lines[i].l.y - 0.1)) at = i;
+    if (at < 0) return;
+    byLabel = true;
+  }
+  // the first list: lines after the question's last "?" line, up to the repeat
+  // (no "?" line: from the first line that is repeated)
+  const later = new Set(ns.slice(at, at + 30));
+  const ask = ns.slice(0, at).map((_, k) => k).filter((k) => /\?\s*$/.test(lines[k].l.text)).pop() ?? ns.findIndex((n, k) => k < at && later.has(n)) - 1;
+  // one entry per choice: a line without a label that sits right under the previous one is its wrapped second line
+  const block: { n: string; x: (typeof lines)[number] }[] = [];
+  for (let k = ask + 1; k < at; k++) {
+    const x = lines[k];
+    if (ns[k].length < 2) continue;
+    const prev = block[block.length - 1]?.x;
+    const wrap = prev && !matchChoiceLabel(x.l.text) && x.s === prev.s && x.l.y - (prev.l.y + prev.l.h) < Math.max(prev.l.h, x.l.h) * 0.6 && x.l.x >= prev.l.x - 0.01;
+    if (wrap) continue;
+    block.push({ n: ns[k], x });
+  }
+  if (!byLabel && (block.length < 2 || block.length > 26)) return;
+  // the repeated rows on the page where the repeat starts, each matched to its place in the first list
+  const start = lines[at];
+  const found: { k: number; l: Line }[] = [];
+  for (let i = at; i < lines.length && lines[i].s.page === start.s.page; i++) {
+    const lab = byLabel ? matchChoiceLabel(lines[i].l.text)?.letter : undefined;
+    const k = byLabel ? (lab ? lab.charCodeAt(0) - 65 : -1) : block.findIndex((b) => b.n === ns[i]);
+    if (k >= 0) found.push({ k, l: lines[i].l });
+    else if (found.length && i - at > found.length + 2) break;
+  }
+  // keep matches that sit where the row spacing puts that row (a later heading can repeat a choice's words);
+  // rows are compared by their centre lines (a line read with its table border is taller)
+  const cy = (l: Line) => l.y + l.h / 2;
+  {
+    const seenK = new Set<number>();
+    const uniq = found.filter((f) => !seenK.has(f.k) && seenK.add(f.k));
+    uniq.sort((a, b) => cy(a.l) - cy(b.l));
+    const steps: number[] = [];
+    for (let i = 1; i < uniq.length; i++) if (uniq[i].k > uniq[i - 1].k) steps.push((cy(uniq[i].l) - cy(uniq[i - 1].l)) / (uniq[i].k - uniq[i - 1].k));
+    const step = steps.sort((a, b) => a - b)[Math.floor(steps.length / 2)] ?? 0.04;
+    const kept: typeof found = [];
+    for (const f of uniq) {
+      const prev = kept[kept.length - 1];
+      if (!prev) kept.push(f);
+      else if (f.k > prev.k && Math.abs(cy(f.l) - (cy(prev.l) + (f.k - prev.k) * step)) <= step * 0.6 + 0.004) kept.push(f);
+    }
+    found.length = 0;
+    found.push(...kept);
+  }
+  const choices: ChoiceRegion[] = [];
+  if (found.length >= 2) {
+    found.sort((a, b) => a.k - b.k);
+    const first = found[0];
+    const last = found[found.length - 1];
+    const step = (cy(last.l) - cy(first.l)) / Math.max(1, last.k - first.k);
+    const h = Math.min(step * 0.8, [...found].map((f) => f.l.h).sort((a, b) => a - b)[Math.floor(found.length / 2)]);
+    const x = Math.max(0, Math.min(...found.map((f) => f.l.x)) - 0.07);
+    const w = Math.min(1 - x, Math.max(...found.map((f) => f.l.x + f.l.w)) - x);
+    // at least as many rows as the highest letter the question itself showed (a row read badly still counts)
+    const maxBefore = Math.max(-1, ...lines.slice(0, at).map((x) => (matchChoiceLabel(x.l.text)?.letter ?? /^[|[\]\s]*\(?([A-J])\)?\s*[|\]]+\s/.exec(x.l.text)?.[1] ?? '@').charCodeAt(0) - 65).filter((v) => v < 26));
+    const total = Math.min(26, Math.max(block.length, maxBefore + 1, byLabel ? last.k + 1 : 0));
+    for (let k = 0; k < total; k++) {
+      const f = found.find((g) => g.k === k);
+      // a row text recognition missed (often the shaded one) sits where the even spacing puts it
+      const c = f ? cy(f.l) : cy(first.l) + (k - first.k) * step;
+      choices.push({ letter: String.fromCharCode(65 + k), page: start.s.page, x, y: c - h / 2, w, h });
     }
   }
+  const keep: DetectedSegment[] = [];
+  for (const s of q.segments) {
+    if (s === start.s) {
+      const base = s.rect ?? start.p.content ?? { x: 0, y: 0, w: 1, h: 1 };
+      const cut = start.l.y - 0.006;
+      // keep the part above the repeated list only if the question has something there
+      const above = lines.some((x) => x.s === s && x.l.y + x.l.h <= cut);
+      if (above && cut - base.y > 0.02) keep.push({ page: s.page, rect: { ...base, h: cut - base.y } });
+      break;
+    }
+    keep.push(s);
+  }
+  const listed = new Set(found.map((f) => f.l));
+  q.inlineExplanation = lines
+    .slice(at)
+    .filter((x) => !listed.has(x.l))
+    .map((x) => x.l.text)
+    .join('\n')
+    .replace(/\n(?=[a-z])/g, ' ')
+    .trim();
+  q.segments = keep.length ? keep : q.segments.slice(0, 1);
+  if (choices.length >= 2) q.answerList = { page: start.s.page, choices };
 }
 
 function linesIn(p: PageLines, r: Rect | undefined): Line[] {

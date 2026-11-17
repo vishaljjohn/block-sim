@@ -108,7 +108,42 @@ export function buildLines(words: Word[]): Line[] {
     while (k < splits.length && c >= splits[k]) k++;
     cols[k].push(i);
   });
-  return cols.flatMap((idxs, k) => clusterLines(words, idxs, k));
+  return markTableLabels(cols.flatMap((idxs, k) => clusterLines(words, idxs, k)));
+}
+
+const BARE = /^[|[\]\s]*\(?([A-Z])\)?\s*[|\]]*\s+(\S.*)$/;
+/**
+ * Answer choices set in a table ("A | Aspirin") have no "." or ")" after the letter. A bare capital letter can also
+ * start a sentence ("A 30-year-old…"), so only a run of 3+ lines at the same left edge lettered A, B, C… in order
+ * counts; those lines are rewritten as "A) Aspirin" so everything downstream reads them as choices.
+ */
+export function markTableLabels(lines: Line[]): Line[] {
+  const byCol = new Map<number, Line[]>();
+  for (const l of lines) (byCol.get(l.column) ?? byCol.set(l.column, []).get(l.column)!).push(l);
+  for (const col of byCol.values()) {
+    col.sort((a, b) => a.y - b.y);
+    for (let i = 0; i < col.length; i++) {
+      const m = BARE.exec(col[i].text);
+      // a run usually starts at A; one continued from the previous page starts later (E, F…) and needs 2+ lines
+      if (!m || m[1] > 'J' || m[1] === 'I') continue;
+      const run = [i];
+      let next = String.fromCharCode(m[1].charCodeAt(0) + 1);
+      for (let k = i + 1; k < col.length && run.length < 26; k++) {
+        const mk = BARE.exec(col[k].text);
+        if (mk && mk[1] === next && Math.abs(col[k].x - col[i].x) < 0.03) {
+          run.push(k);
+          next = String.fromCharCode(next.charCodeAt(0) + 1);
+        } else if (mk || Math.abs(col[k].x - col[i].x) < 0.03) break;
+      }
+      if (run.length < (m[1] === 'A' ? 3 : 2)) continue;
+      for (const k of run) {
+        const mk = BARE.exec(col[k].text)!;
+        col[k].text = `${mk[1]}) ${mk[2]}`;
+      }
+      i = run[run.length - 1];
+    }
+  }
+  return lines;
 }
 
 /** Flatten pages into parser lines, with blank lines at paragraph gaps and page furniture removed. */

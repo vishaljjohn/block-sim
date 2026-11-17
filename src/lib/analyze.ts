@@ -9,6 +9,7 @@ import type { ParsedKey } from './keyParser';
 import { resolveAnswerText } from './keyParser';
 import { blankQuestion, fixedLayout, type HighlightReader, type WordsProvider } from './importer';
 import { examPdf, hasRealText, pageHasImage, pageWords, renderToCanvas, type PdfDoc } from './pdf';
+import { isScrambled } from './pdfWords';
 import { mergeWords } from './pdfWords';
 import { detectCrop, findRadios, highlightedChoice, inkBands, union } from './crop';
 
@@ -73,12 +74,79 @@ export function processPage(examId: string | null, doc: PdfDoc, page: number, al
   return slot(() => processPageNow(examId, doc, page, typeof allowOcr === 'function' ? allowOcr() : allowOcr));
 }
 
+const scrambleCache = new WeakMap<PdfDoc, Promise<boolean>>();
+/** Decided once per document from a sample of its pages (short pages alone can't tell). */
+function scrambledDoc(doc: PdfDoc): Promise<boolean> {
+  let p = scrambleCache.get(doc);
+  if (!p) {
+    p = (async () => {
+      const n = doc.numPages;
+      const sample = [...new Set(Array.from({ length: Math.min(n, 10) }, (_, i) => 1 + Math.floor((i * n) / Math.min(n, 10))))];
+      let seen = 0;
+      let bad = 0;
+      for (const k of sample) {
+        const ws = await pageWords(await doc.getPage(k)).catch(() => [] as Word[]);
+        if (ws.filter((w) => w.t.trim().length >= 3).length < 8) continue;
+        seen++;
+        if (isScrambled(ws)) bad++;
+      }
+      return bad >= 2 && bad > seen / 2;
+    })();
+    scrambleCache.set(doc, p);
+  }
+  return p;
+}
+
+/**
+ * A copy of the page with long straight lines (table borders, boxes around choice letters) painted white: OCR
+ * reads letters inside boxes much better without them. Only used for reading, never shown.
+ */
+function withoutRules(src: HTMLCanvasElement): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = src.width;
+  c.height = src.height;
+  const g = c.getContext('2d')!;
+  g.drawImage(src, 0, 0);
+  const img = g.getImageData(0, 0, c.width, c.height);
+  const { data, width: W, height: H } = img;
+  const dark = (i: number) => data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < 170;
+  const minH = Math.max(40, Math.round(W * 0.04));
+  const minV = Math.max(30, Math.round(H * 0.025));
+  const kill: number[] = [];
+  for (let y = 0; y < H; y++) {
+    let run = 0;
+    for (let x = 0; x <= W; x++) {
+      if (x < W && dark((y * W + x) * 4)) run++;
+      else {
+        if (run >= minH) for (let k = x - run; k < x; k++) kill.push(y * W + k);
+        run = 0;
+      }
+    }
+  }
+  for (let x = 0; x < W; x++) {
+    let run = 0;
+    for (let y = 0; y <= H; y++) {
+      if (y < H && dark((y * W + x) * 4)) run++;
+      else {
+        if (run >= minV) for (let k = y - run; k < y; k++) kill.push(k * W + x);
+        run = 0;
+      }
+    }
+  }
+  for (const p of kill) data.set([255, 255, 255], p * 4);
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
 async function processPageNow(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean): Promise<PageText | null> {
   const pg = await doc.getPage(page);
   let words: Word[] = await pageWords(pg);
   let source: PageText['source'] = 'pdf';
   let conf = 100;
-  const real = hasRealText(words);
+  // a document whose text is mostly scrambled: don't trust its text on any page
+  const docScrambled = await scrambledDoc(doc);
+  const real = hasRealText(words) && !docScrambled;
+  if (docScrambled || isScrambled(words)) words = [];
   // little typed text plus a picture: the question is probably in the picture, so read it too
   const mixed = real && words.length < 40 && (await pageHasImage(pg));
   if (!real || mixed) {
@@ -100,6 +168,16 @@ async function processPageNow(examId: string | null, doc: PdfDoc, page: number, 
       if (choicesIn(w2) >= 2) {
         r = r2;
         ocrWords = w2;
+      } else {
+        // choices in boxes or a table: read again with the lines erased
+        const clean = withoutRules(canvas);
+        const r3 = await ocrCanvas(clean);
+        clean.width = clean.height = 1;
+        const w3 = keep(r3.words);
+        if (choicesIn(w3) >= 2) {
+          r = r3;
+          ocrWords = w3;
+        }
       }
     }
     canvas.width = canvas.height = 1; // free memory now
@@ -212,7 +290,9 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
   const pls = pages.map((p) => texts.get(p)).filter((t): t is PageText => !!t).map(toPageLines);
   if (opts.auto || opts.inlineAnswers) {
     const lay = detectLayout(pls, { inlineAnswers: opts.inlineAnswers });
-    let enough = lay.questions.length >= 2 && (lay.multiPerPage || lay.confidence >= 0.3 || lay.questions.length >= pages.length * 0.3);
+    // a long run of numbers in order (5, 6, 7…) is convincing even when each question spans several pages
+    const inOrder = lay.questions.filter((q, i) => i > 0 && q.number === lay.questions[i - 1].number + 1).length;
+    let enough = lay.questions.length >= 2 && (lay.multiPerPage || lay.confidence >= 0.3 || lay.questions.length >= pages.length * 0.3 || (inOrder >= 4 && inOrder >= lay.questions.length * 0.8));
     // the key says how many questions there are: when whole pages divide evenly into that many questions and
     // the page text disagrees, trust the page count (screenshots without readable question numbers)
     const n = opts.expectedCount ?? 0;
@@ -234,7 +314,35 @@ export async function analyzeExam(exam: Exam, doc: PdfDoc, opts: AnalyzeOptions,
       });
     }
     if (opts.inlineAnswers) {
-      const entries = lay.questions.filter((d) => d.inlineAnswer).map((d, i) => ({ n: opts.auto && enough ? i + 1 : d.number, answer: d.inlineAnswer!, explanation: d.inlineExplanation ?? '', conf: 1 }));
+      // answers marked by shading in a repeated choice list: read them from the page pixels
+      await Promise.all(
+        lay.questions
+          .filter((d) => !d.inlineAnswer && d.answerList)
+          .map((d) =>
+            slot(async () => {
+              try {
+                const c = await renderToCanvas(await doc.getPage(d.answerList!.page), 900);
+                const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+                c.width = c.height = 1;
+                // also test the row just after the list: the last choice may not have been read in the question
+                const cs = d.answerList!.choices;
+                const last = cs[cs.length - 1];
+                const step = cs.length > 1 ? (last.y - cs[0].y) / (cs.length - 1) : 0.04;
+                const extra = { ...last, letter: String.fromCharCode(last.letter.charCodeAt(0) + 1), y: last.y + step };
+                const got = highlightedChoice({ data: img.data, width: img.width, height: img.height }, [...cs, extra]) ?? undefined;
+                if (got === extra.letter) cs.push(extra);
+                d.inlineAnswer = got;
+              } catch (e) {
+                logError('shaded answer', e);
+              }
+            }),
+          ),
+      );
+      // numbered by position in the layout (before leaving out questions without an answer)
+      const entries = lay.questions
+        .map((d, i) => ({ d, n: opts.auto && enough ? i + 1 : d.number }))
+        .filter(({ d }) => d.inlineAnswer || d.inlineExplanation)
+        .map(({ d, n }) => ({ n, answer: d.inlineAnswer ?? '', explanation: d.inlineExplanation ?? '', conf: d.inlineAnswer ? 1 : 0, ...(d.answerList ? { choices: d.answerList.choices.length } : {}) }));
       inlineKey = { entries, tags: {}, format: 'answer-lines' };
       // the fixed layout must still hide the answers: cut each page above its "Answer:" line
       if (!(opts.auto && enough)) {

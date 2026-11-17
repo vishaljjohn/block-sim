@@ -20,7 +20,8 @@ export function intersects(a: Rect, b: Rect): boolean {
 
 /** Clickable choices are used only when detection found a clean run and the user has not asked for bubbles. */
 export function usesChoiceRegions(exam: Exam, q: Question): boolean {
-  return !exam.alwaysBubbles && !q.forceBubbles && !!q.choices && q.choices.length >= 2;
+  // every choice must be clickable: when fewer were found on the page than the question has, use the bubbles
+  return !exam.alwaysBubbles && !q.forceBubbles && !!q.choices && q.choices.length >= 2 && q.choices.length >= (q.choiceCount ?? 0);
 }
 
 /**

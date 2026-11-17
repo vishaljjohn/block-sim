@@ -34,3 +34,34 @@ describe('pictures always stay with their question', () => {
     expect(lay.questions[0].segments.map((s) => s.page)).toEqual([1]);
   });
 });
+
+describe('explanations that repeat the choices with the answer shaded', () => {
+  it('the question ends where its choice list starts again; that list is kept to read the shading', () => {
+    const p1 = pageLines(1, [...line('Question # 1', 0.05, 0.05), ...line('A made-up patient has an invented rash today', 0.05, 0.1), ...line('A) One', 0.08, 0.3), ...line('B) Two', 0.08, 0.33), ...line('C) Three', 0.08, 0.36)]);
+    const p2 = pageLines(2, [...line('A) One', 0.08, 0.05), ...line('B) Two', 0.08, 0.08), ...line('C) Three', 0.08, 0.11), ...line('This invented explanation says why two is right', 0.05, 0.3)]);
+    const p3 = pageLines(3, [...line('Question # 2', 0.05, 0.05), ...line('Another made-up stem for this test', 0.05, 0.1), ...line('A) Yes', 0.08, 0.3), ...line('B) No', 0.08, 0.33)]);
+    const lay = detectLayout([p1, p2, p3], { inlineAnswers: true });
+    const q1 = lay.questions[0];
+    expect(q1.segments.map((s) => s.page)).toEqual([1]);
+    expect(q1.answerList?.page).toBe(2);
+    expect(q1.answerList?.choices.map((c) => c.letter)).toEqual(['A', 'B', 'C']);
+    expect(q1.inlineExplanation).toContain('invented explanation');
+    expect(q1.inlineExplanation).not.toContain('Three');
+  });
+});
+
+describe('repeated choice list: rows text recognition missed, and look-alike headings', () => {
+  it('an unread row is placed by the row spacing, and a later heading with a choice\'s words is ignored', () => {
+    const p1 = pageLines(1, [...line('Question # 1', 0.05, 0.05), ...line('An invented stem about a made-up patient', 0.05, 0.1), ...line('Which one is right?', 0.05, 0.2),
+      ...line('A) Alpha thing', 0.1, 0.3), ...line('B) Beta thing', 0.1, 0.34), ...line('C) Gamma thing', 0.1, 0.38), ...line('D) Delta thing', 0.1, 0.42)]);
+    // the explanation repeats the list, but the shaded B row was not read; a heading below repeats "Gamma thing"
+    const p2 = pageLines(2, [...line('A) Alpha thing', 0.1, 0.1), ...line('C) Gamma thing', 0.1, 0.18), ...line('D) Delta thing', 0.1, 0.22), ...line('Gamma thing', 0.3, 0.4), ...line('An invented explanation follows here', 0.05, 0.5)]);
+    const lay = detectLayout([p1, p2], { inlineAnswers: true });
+    const list = lay.questions[0].answerList!;
+    expect(list.choices.map((c) => c.letter)).toEqual(['A', 'B', 'C', 'D']);
+    const b = list.choices[1];
+    expect(b.y + b.h / 2).toBeGreaterThan(0.13);
+    expect(b.y + b.h / 2).toBeLessThan(0.16);
+    expect(lay.questions[0].segments.map((s) => s.page)).toEqual([1]);
+  });
+});

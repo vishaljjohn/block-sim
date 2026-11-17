@@ -81,6 +81,8 @@ export function applyKey(questions: Question[], key: ParsedKey, keepExisting = f
     if (!(keepExisting && q.explanation)) out.explanation = e.explanation;
     out.keyConfidence = e.conf;
     if (out.answer && out.answer.charCodeAt(0) - 65 >= out.choiceCount) out.choiceCount = out.answer.charCodeAt(0) - 64;
+    // the explanation repeats the full choice list: trust its length when fewer choices were read on the page
+    if (e.choices && e.choices > out.choiceCount) out.choiceCount = e.choices;
     if (!out.answer && e.answerText) {
       const letter = q.choiceTexts?.length ? resolveAnswerText(e.answerText, q.choiceTexts) : '';
       if (letter) {
