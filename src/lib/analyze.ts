@@ -69,9 +69,9 @@ async function slot<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Read one page: real PDF text when present, otherwise OCR. Includes auto-crop. */
-export function processPage(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean | (() => boolean) = true): Promise<PageText | null> {
+export function processPage(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean | (() => boolean) = true, readPictures = false): Promise<PageText | null> {
   // decided when the page's turn comes, so "Skip waiting" also stops pages that were already queued
-  return slot(() => processPageNow(examId, doc, page, typeof allowOcr === 'function' ? allowOcr() : allowOcr));
+  return slot(() => processPageNow(examId, doc, page, typeof allowOcr === 'function' ? allowOcr() : allowOcr, readPictures));
 }
 
 const scrambleCache = new WeakMap<PdfDoc, Promise<boolean>>();
@@ -138,7 +138,7 @@ function withoutRules(src: HTMLCanvasElement): HTMLCanvasElement {
   return c;
 }
 
-async function processPageNow(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean): Promise<PageText | null> {
+async function processPageNow(examId: string | null, doc: PdfDoc, page: number, allowOcr: boolean, readPictures = false): Promise<PageText | null> {
   const pg = await doc.getPage(page);
   let words: Word[] = await pageWords(pg);
   let source: PageText['source'] = 'pdf';
@@ -148,7 +148,8 @@ async function processPageNow(examId: string | null, doc: PdfDoc, page: number, 
   const real = hasRealText(words) && !docScrambled;
   if (docScrambled || isScrambled(words)) words = [];
   // little typed text plus a picture: the question is probably in the picture, so read it too
-  const mixed = real && words.length < 40 && (await pageHasImage(pg));
+  // (readPictures: also read the text inside pictures, e.g. question screenshots in an answer key)
+  const mixed = real && (words.length < 40 || readPictures) && (await pageHasImage(pg));
   if (!real || mixed) {
     if (!allowOcr) return real ? finish(examId, doc, page, words, 'pdf', 100) : null;
     const v = pg.getViewport({ scale: 1 });
@@ -243,13 +244,13 @@ export const highlightReader: HighlightReader = async (doc, page, words) => {
 };
 
 /** Words provider for reading answer keys: PDF text, else OCR (key PDFs are not cached). */
-export function wordsProvider(examId: string | null): WordsProvider {
+export function wordsProvider(examId: string | null, readPictures = false): WordsProvider {
   return async (doc, page) => {
-    if (examId) {
+    if (examId && !readPictures) {
       const cached = await db.pages.get(`${examId}:${page}`);
       if (cached) return { words: cached.words, source: cached.source };
     }
-    const pt = await processPage(examId, doc, page);
+    const pt = await processPage(readPictures ? null : examId, doc, page, true, readPictures);
     if (!pt) return { words: [], source: 'none' };
     if (examId) await savePageTexts(examId, [pt]);
     return { words: pt.words, source: pt.source };

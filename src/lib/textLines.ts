@@ -147,6 +147,18 @@ export function markTableLabels(lines: Line[]): Line[] {
 }
 
 /** Flatten pages into parser lines, with blank lines at paragraph gaps and page furniture removed. */
+/**
+ * A short number or scrap at the start of a line, far from the rest of it, belongs to something beside the text
+ * (the question list down the side of an exam screenshot): "39   Correct Answer: E." is "Correct Answer: E.".
+ */
+export function dropSidebarToken(l: Line, words: Word[]): string {
+  if (l.idx.length < 2) return l.text;
+  const [a, b] = [words[l.idx[0]], words[l.idx[1]]];
+  const gap = b.x - (a.x + a.w);
+  if (a.t.length <= 3 && /^[\W\d]*\d[\W\d]*$|^[^A-Za-z]{1,3}$/.test(a.t) && gap > 0.05 && /^[A-Za-z(]/.test(b.t)) return l.idx.slice(1).map((i) => words[i].t).join(' ');
+  return l.text;
+}
+
 export function pagesToKeyLines(pages: { page: number; words: Word[] }[]): KeyLine[] {
   const perPage = pages.map((p) => {
     const lines = buildLines(p.words);
@@ -154,7 +166,7 @@ export function pagesToKeyLines(pages: { page: number; words: Word[] }[]): KeyLi
     lines.forEach((l, i) => {
       const prev = lines[i - 1];
       if (prev && prev.column === l.column && l.y - (prev.y + prev.h) > Math.max(prev.h, l.h) * 0.8) out.push({ text: '', page: p.page });
-      out.push({ text: l.text, page: p.page, conf: l.conf, top: false });
+      out.push({ text: dropSidebarToken(l, p.words), page: p.page, conf: l.conf, top: false });
     });
     return out;
   });

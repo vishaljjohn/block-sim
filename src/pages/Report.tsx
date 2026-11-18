@@ -9,6 +9,7 @@ import { TimeChart } from '../ui/charts';
 import { Check, Cross, IconFlag } from '../ui/icons';
 import { MISS_REASONS } from '../types';
 import { Donut, ScoreBar } from '../ui/ScoreBar';
+import { ExportPdfDialog } from '../ui/ExportPdfDialog';
 import { backupFileName, useFolderStatus } from './Home';
 
 type Show = 'correct' | 'incorrect' | 'marked' | 'omitted';
@@ -31,6 +32,7 @@ export function Report({ attemptId }: { attemptId: string }) {
   const [show, setShow] = useState<Set<Show>>(new Set(['correct', 'incorrect', 'marked', 'omitted']));
   const [showMenu, setShowMenu] = useState(false);
   const [msg, setMsg] = useState('');
+  const [pdf, setPdf] = useState(false);
   if (a === undefined) return <div className="text-sm">Loading…</div>;
   if (a === null) return <div>This attempt was not found. <a className="link" href="#/">Back to the library</a></div>;
   if (a.status !== 'completed') return <div>This block is not finished yet. <a className="link" href={`#/test/${a.id}`}>Resume it</a></div>;
@@ -54,12 +56,14 @@ export function Report({ attemptId }: { attemptId: string }) {
 
   return (
     <div data-testid="report">
+      {pdf && <ExportPdfDialog attempt={a} onClose={() => setPdf(false)} />}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
           <a className="link text-sm" href={a.examId ? `#/exam/${a.examId}` : '#/'}>
             ← {a.examId ? 'Previous tests' : 'Library'}
           </a>
           <div className="flex flex-wrap gap-2">
+            <button className="btn" onClick={() => setPdf(true)} data-testid="report-pdf">Export as PDF</button>
             <button className="btn" onClick={csv} data-testid="report-csv">Export CSV</button>
             <a className="btn-primary" href={`#/review/${a.id}`} data-testid="review-all">Review Test</a>
           </div>

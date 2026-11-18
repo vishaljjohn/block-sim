@@ -13,13 +13,6 @@ export const OLD_BETA_DB = 'blocksim-beta';
  * old beta storage is left untouched.
  */
 export async function bringInBetaHistory(): Promise<number> {
-  // the old beta offline copy (its service worker and caches) is no longer needed
-  void Promise.resolve(navigator.serviceWorker?.getRegistrations?.() ?? [])
-    .then((rs) => Promise.all(rs.filter((r) => r.scope.endsWith('/beta/')).map((r) => r.unregister())))
-    .catch(() => {});
-  void Promise.resolve(globalThis.caches?.keys?.() ?? [])
-    .then((ks) => Promise.all(ks.filter((k) => k.startsWith('blocksim-beta-')).map((k) => caches.delete(k))))
-    .catch(() => {});
   try {
     if (await getMeta('betaMerged', false)) return 0;
     if (!(await Dexie.exists(OLD_BETA_DB))) {

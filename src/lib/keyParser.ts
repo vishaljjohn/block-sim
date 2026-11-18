@@ -31,6 +31,8 @@ export interface ParsedKey {
   entries: KeyEntry[];
   tags: Record<number, string[]>;
   format: 'numbered' | 'answer-lines' | 'letter-lines' | 'letter-list' | 'none';
+  /** answers tied to question markers ("Item 12 of 50") rather than counted in order */
+  anchored?: boolean;
 }
 
 const DASH = '\\-–—';
@@ -39,7 +41,7 @@ const PAIR_RE = new RegExp(`^(?:Q(?:uestion)?\\.?\\s*|#\\s*)?(\\d{1,3})\\s*(?:[.
 const STEM_RE = /^(?:(?:[^\w\s]{1,3}|[^\w\s]?[IlXx|✓✗][^\w\s]?)\s*(?=\d))?(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*(?:[.):](?![\d,])|\s[-–—]\s)\s*(.*)$/i; // "36.9°C" is a number, not item 36
 const BARE_NUM_RE = /^(?:Q(?:uestion)?\.?\s*|#\s*)?(\d{1,3})\s*[.):]?$/i;
 export const ANSWER_RE = new RegExp(
-  `^[•*\\-\\s]*(?:the\\s+)?(?:correct\\s*answers?|right\\s*answer|correct\\s*choice|correct\\s*response|answer|ans|key)\\.?\\s*(?:is|was)?\\s*[:=${DASH}]?\\s*\\(?([A-Za-z])\\)?(?=$|[\\s.,;:)${DASH}])\\s*[.):,;${DASH}]?\\s*(.*)$`,
+  `^[•·●▪◦*.\\-\\s]*(?:the\\s+)?(?:correct\\s*answers?|right\\s*answer|correct\\s*choice|correct\\s*response|answer|ans|key)\\.?\\s*(?:is|was)?\\s*[:=${DASH}]?\\s*\\(?([A-Za-z])\\)?(?=$|[\\s.,;:)${DASH}])\\s*[.):,;${DASH}]?\\s*(.*)$`,
   'i',
 );
 const ANSWER_TEXT_RE = /^[•*\-\s]*(?:the\s+)?(?:correct\s*answer|right\s*answer|answer)\s*(?:is\s*:?|[:=])\s*(.{3,})$/i;
@@ -334,10 +336,28 @@ function parseLoose(lines: KeyLine[]): ParsedKey {
   };
   // pages that hold an answer line: reaching one of them ends the previous explanation (it is the next question)
   const answerPages = new Set(lines.filter((l, i) => l.page != null && ANSWER_RE.test(texts[i])).map((l) => l.page));
+  // question markers before an answer ("Item 12 of 50" in a screenshot, or "12. A 30-year-old…") tie the answer to
+  // its question; when the key uses them, an answer with no new marker since the last one corrects that answer
+  const markerOf = (t: string): number | null => {
+    const it = ITEM_OF_RE.exec(t);
+    if (it) return parseInt(it[1], 10);
+    const st = /^(?:Q(?:uestion)?\s*#?\s*)?(\d{1,3})\s*[.)]\s+[A-Z]/.exec(t);
+    return st ? parseInt(st[1], 10) : null;
+  };
+  const markers = texts.map(markerOf);
+  const usesMarkers = markers.filter((m) => m != null).length >= 3;
+  let marker: number | null = null;
+  let markerUsed = true;
   let curPage: number | undefined;
   lines.forEach((l, i) => {
     const text = texts[i];
     const a = ANSWER_RE.exec(text);
+    // a plausible next question number only (numbered lists inside explanations are not markers)
+    const lastN = answers[answers.length - 1]?.n ?? 0;
+    if (usesMarkers && markers[i] != null && !a && markers[i]! > lastN && markers[i]! <= lastN + 5) {
+      marker = markers[i];
+      markerUsed = false;
+    }
     if (l.page != null && l.page !== curPage) {
       if (cur && curPage != null && answerPages.has(l.page) && !(a && isLetterOk(a[1], a[2]))) {
         flush();
@@ -347,7 +367,9 @@ function parseLoose(lines: KeyLine[]): ParsedKey {
     }
     if (a && isLetterOk(a[1], a[2])) {
       flush();
-      const e: KeyEntry = { n: answers.length + 1, answer: a[1].toUpperCase(), explanation: '', conf: l.conf ?? 1, ...(l.page != null ? { page: l.page } : {}) };
+      const n = usesMarkers && marker != null && !markerUsed ? marker : (answers[answers.length - 1]?.n ?? 0) + 1;
+      markerUsed = true;
+      const e: KeyEntry = { n, answer: a[1].toUpperCase(), explanation: '', conf: l.conf ?? 1, ...(l.page != null ? { page: l.page } : {}) };
       answers.push(e);
       cur = { e, buf: a[2] ? [a[2]] : [] };
     } else if (cur) {
@@ -359,7 +381,22 @@ function parseLoose(lines: KeyLine[]): ParsedKey {
     }
   });
   flush();
-  if (answers.length >= 1) return { entries: answers, tags: {}, format: 'answer-lines' };
+  // one question per page (each page has at most one answer, and most pages have one): number answers by page, so
+  // a page whose answer line could not be read leaves a gap instead of shifting every later answer; such pages get
+  // an empty entry, so the answer can still be found another way (a highlighted choice)
+  if (!usesMarkers && answers.length >= 3) {
+    const pagesSeen = [...new Set(lines.map((l) => l.page).filter((p): p is number => p != null))].sort((a, b) => a - b);
+    const perPage = new Map<number, number>();
+    for (const e of answers) if (e.page != null) perPage.set(e.page, (perPage.get(e.page) ?? 0) + 1);
+    if (pagesSeen.length && [...perPage.values()].every((v) => v === 1) && answers.length >= pagesSeen.length * 0.75) {
+      const first = pagesSeen[0];
+      for (const e of answers) e.n = e.page! - first + 1;
+      for (const p of pagesSeen) if (!perPage.has(p)) answers.push({ n: p - first + 1, answer: '', explanation: '', conf: 0, page: p, raw: [] });
+      answers.sort((x, y) => x.n - y.n);
+      return { entries: answers, tags: {}, format: 'answer-lines', anchored: true };
+    }
+  }
+  if (answers.length >= 1) return { entries: answers, tags: {}, format: 'answer-lines', ...(usesMarkers ? { anchored: true } : {}) };
 
   // one letter per line
   const letterLines = nonEmpty.filter((t) => /^\(?[A-Za-z]\)?[.)]?$/.test(t));

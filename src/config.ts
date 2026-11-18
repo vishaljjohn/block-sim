@@ -1,9 +1,13 @@
 declare const __APP_VERSION__: string;
 declare const __BUILD_TIME__: string;
+declare const __CHANNEL__: string;
 
 export const APP_NAME = 'Test Simulator';
 export const APP_VERSION: string = __APP_VERSION__;
 export const BUILD_TIME: string = __BUILD_TIME__;
+/** beta: the `beta` branch at /block-sim/beta/, for trying changes; it uses the same saved data as the live site */
+export const CHANNEL: 'stable' | 'beta' = __CHANNEL__ === 'beta' ? 'beta' : 'stable';
+export const IS_BETA = CHANNEL === 'beta';
 /** Storage names. Kept from the app's first version so everyone's saved history stays where it is. */
 export const DB_NAME = 'blocksim';
 export const STORAGE_PREFIX = 'blocksim:';

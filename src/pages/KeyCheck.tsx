@@ -216,7 +216,7 @@ export function KeyCheck({ examId }: { examId: string }) {
                   setBusy('Reading the key PDF…');
                   try {
                     const kd = await openPdf(await f.arrayBuffer());
-                    const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the key: page ${d} of ${t}…`), highlightReader);
+                    const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => setBusy(`Reading the key: page ${d} of ${t}…`), highlightReader, wordsProvider(null, true));
                     applyParsed(r.key);
                   } catch (er) {
                     setBusy('Could not read that PDF: ' + String(er));

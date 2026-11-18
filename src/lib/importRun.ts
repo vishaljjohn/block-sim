@@ -63,7 +63,7 @@ export async function importExam(o: ImportOptions, status: (msg: string, ocr?: b
       status('Reading the answer key PDF…');
       const kd = await openPdf(o.keyPdf);
       try {
-        const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => status(`Reading the answer key: page ${d} of ${t}…`, true), highlightReader);
+        const r = await readKeyFromPdf(kd, 1, kd.numPages, wordsProvider(null), (d, t) => status(`Reading the answer key: page ${d} of ${t}…`, true), highlightReader, wordsProvider(null, true));
         key = r.key;
         if (r.pagesWithText === 0) note = 'The answer key PDF has no readable text.';
       } finally {
@@ -71,7 +71,7 @@ export async function importExam(o: ImportOptions, status: (msg: string, ocr?: b
       }
     } else if (o.keySource === 'same' && keyStartN >= 1) {
       status('Reading the answer key pages…');
-      key = (await readKeyFromPdf(doc, keyStartN, pageCount, wordsProvider(exam.id), (d, t) => status(`Reading the answer key: page ${d} of ${t}…`, true), highlightReader)).key;
+      key = (await readKeyFromPdf(doc, keyStartN, pageCount, wordsProvider(exam.id), (d, t) => status(`Reading the answer key: page ${d} of ${t}…`, true), highlightReader, wordsProvider(null, true))).key;
     }
 
     // the key's highest question number says how many questions there are — when most of it was readable

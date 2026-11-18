@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const base = '/block-sim/';
+// beta (the `beta` branch) is published under /block-sim/beta/ for trying changes before they go live;
+// it shares the live site's saved data (same storage names), so it must never change the database schema
+const channel = process.env.VITE_CHANNEL === 'beta' ? 'beta' : 'stable';
+const base = channel === 'beta' ? '/block-sim/beta/' : '/block-sim/';
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 function walk(dir: string, out: string[] = [], root = dir): string[] {
@@ -36,10 +39,12 @@ function serviceWorker(): Plugin {
       const tpl = fs.readFileSync(new URL('./src/sw.template.js', import.meta.url), 'utf8');
       const sw = tpl
         .replace('"__BASE__"', JSON.stringify(base))
+        .replace('"__CHANNEL__"', JSON.stringify(channel))
         .replace('"__BUILD_ID__"', JSON.stringify(buildId))
         .replace('"__FILES__"', JSON.stringify(files));
       fs.writeFileSync(path.join(outDir, 'sw.js'), sw);
-      // the old beta link (/block-sim/beta/) is retired: a page that sends people to the app, and a service worker
+      if (channel === 'beta') return;
+      // when there is no beta build, the beta link (/block-sim/beta/) is retired: a page that sends people to the app, and a service worker
       // that replaces the old beta one, clears its offline copy and unregisters itself
       fs.mkdirSync(path.join(outDir, 'beta'), { recursive: true });
       fs.writeFileSync(
@@ -65,10 +70,11 @@ export default defineConfig({
   plugins: [react(), serviceWorker()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __CHANNEL__: JSON.stringify(channel),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   build: {
-    outDir: 'dist',
+    outDir: channel === 'beta' ? 'dist-beta' : 'dist',
     target: 'es2022',
     chunkSizeWarningLimit: 2000,
   },

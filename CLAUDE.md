@@ -10,8 +10,11 @@
 - No exam-publisher or licensing-exam names, logos or trademarks in UI, code or docs: say "board-style".
 - No feature for sharing exams or question content between users.
 - Run before every commit: `npm run lint && npm test && npm run build && npm run e2e` (all must be green).
-- One channel only: work on `main` and push; GitHub Pages publishes it to the live site (`/block-sim/`).
-  No beta branch. Bump the version and tag every release (`npm version patch|minor` → `vX.Y.Z`).
+- New work ships to **beta first** (`beta` branch → `/block-sim/beta/`, labelled BETA). Merge to `main` only when
+  the owner says "promote to stable"; bump the version and tag every stable release (`vX.Y.Z`).
+- Beta uses the **same saved data** as the live site (same storage names) so the owner can try changes on real exams;
+  the tab guard keeps only one of them open at a time. So beta must never bump the Dexie version or change stored
+  data in a way the live version cannot read.
 - Every storage name comes from `src/config.ts` (`DB_NAME`, `STORAGE_PREFIX`, `TAB_CHANNEL`); never rename them
   (everyone's history lives there) and never hard-code one.
 - Data safety: schema changes need a Dexie version bump + a pure migration function + a unit test

@@ -7,6 +7,7 @@
     "prepare-assets": "node scripts/prepare-assets.mjs",
     "dev": "npm run prepare-assets && vite",
     "build": "npm run prepare-assets && tsc --noEmit && vite build",
+    "build:beta": "npm run prepare-assets && tsc --noEmit && VITE_CHANNEL=beta vite build",
     "preview": "vite preview",
     "lint": "eslint src tests scripts --max-warnings 0",
     "test": "vitest run",

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { APP_VERSION, BUG_REPORT_URL } from '../config';
+import { APP_VERSION, BUG_REPORT_URL, IS_BETA } from '../config';
 
 const NAV = [
   { href: '#/', label: 'Library', icon: 'M4 5h6v14H4zM14 5h6v14h-6z', match: (p: string) => p === '/' || p.startsWith('/exam') || p.startsWith('/import') || p.startsWith('/setup') || p.startsWith('/report') },
@@ -40,6 +40,11 @@ export function Shell({ path, children, wide }: { path: string; children: ReactN
             <span className="text-[17px] font-semibold tracking-tight" style={{ color: 'var(--ink)' }}>
               Test Simulator
             </span>
+            {IS_BETA && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: '#fef3c7', color: '#92400e' }} data-testid="beta-badge">
+                Beta
+              </span>
+            )}
           </a>
           <nav className="flex flex-wrap gap-1 text-sm" aria-label="Main">
             {NAV.map((n) => {

@@ -109,20 +109,34 @@ export interface KeyReadResult {
 }
 
 /** Read an answer key out of PDF pages (rebuilding lines by position). */
-export async function readKeyFromPdf(doc: PdfDoc, fromPage: number, toPage: number, provider: WordsProvider, onProgress?: (done: number, total: number) => void, highlight?: HighlightReader): Promise<KeyReadResult> {
+export async function readKeyFromPdf(doc: PdfDoc, fromPage: number, toPage: number, provider: WordsProvider, onProgress?: (done: number, total: number) => void, highlight?: HighlightReader, deeper?: WordsProvider): Promise<KeyReadResult> {
   const total = toPage - fromPage + 1;
-  let done = 0;
-  // pages are read in parallel (OCR runs through a small worker pool) and put back in order
-  const pages = await Promise.all(
-    Array.from({ length: total }, async (_, i) => {
-      const p = fromPage + i;
-      const r = await provider(doc, p).catch(() => ({ words: [] as Word[], source: 'none' as const }));
-      onProgress?.(++done, total);
-      return { page: p, words: r.words };
-    }),
-  );
+  const readAll = async (prov: WordsProvider) => {
+    let done = 0;
+    // pages are read in parallel (OCR runs through a small worker pool) and put back in order
+    return Promise.all(
+      Array.from({ length: total }, async (_, i) => {
+        const p = fromPage + i;
+        const r = await prov(doc, p).catch(() => ({ words: [] as Word[], source: 'none' as const }));
+        onProgress?.(++done, total);
+        return { page: p, words: r.words };
+      }),
+    );
+  };
+  let pages = await readAll(provider);
+  let key = parseKeyLines(pagesToKeyLines(pages));
+  // answers with no question numbers in the text: the numbers may be inside pictures (question screenshots), so
+  // read those too and tie each answer to its question instead of counting them in order
+  if (deeper && key.format === 'answer-lines' && !key.anchored) {
+    const pages2 = await readAll(deeper);
+    const key2 = parseKeyLines(pagesToKeyLines(pages2));
+    const ans = (k: ParsedKey) => k.entries.filter((e) => e.answer).length;
+    if (key2.anchored && ans(key2) >= ans(key)) {
+      pages = pages2;
+      key = key2;
+    }
+  }
   const withText = pages.filter((p) => p.words.length).length;
-  const key = parseKeyLines(pagesToKeyLines(pages));
   // entries with no answer letter: the key may mark the answer by highlighting the choice
   if (highlight) {
     const byPage = new Map(pages.map((p) => [p.page, p.words]));

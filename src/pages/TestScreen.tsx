@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db, migrateAttempt } from '../db';
 import { STORAGE_PREFIX } from '../config';
+import { logError } from '../lib/errorLog';
 
 /**
  * Synchronous mirror of the active attempt in localStorage. IndexedDB writes are asynchronous and can be
@@ -79,6 +80,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [docError, setDocError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [customMin, setCustomMin] = useState('');
+  const [saveTrouble, setSaveTrouble] = useState(false);
   const fsSupported = typeof document !== 'undefined' && !!document.documentElement.requestFullscreen;
   const [isFull, setIsFull] = useState(() => !!document.fullscreenElement);
   useEffect(() => {
@@ -157,8 +159,19 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
         // the database now holds the newest state; the instant copy is no longer needed
         if (seq === saveSeq.current) clearMirror(snap.id);
       })
-      .catch((e) => console.error('save failed', e));
+      .then(() => setSaveTrouble(false))
+      .catch((e) => {
+        // the instant copy in this tab still holds the change; tell the person and keep trying
+        console.error('save failed', e);
+        logError('autosave', e);
+        setSaveTrouble(true);
+        window.setTimeout(() => {
+          if (aRef.current) persistRef.current?.();
+        }, 4000);
+      });
   }, []);
+  const persistRef = useRef<(() => void) | null>(null);
+  persistRef.current = persist;
 
   /** Apply a change and autosave it immediately. */
   const commit = useCallback(
@@ -680,6 +693,11 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
             )}
           </header>
 
+          {saveTrouble && (
+            <div className="border-b border-red-700 bg-red-50 px-3 py-1.5 text-center text-sm text-red-800" role="alert" data-testid="save-trouble">
+              Your last change could not be saved to this computer's storage yet. It is kept in this tab and saving is being retried — please don't close this tab. If this keeps showing, free some disk space or use Settings → Export everything.
+            </div>
+          )}
           {/* -------- question area -------- */}
           <main ref={areaRef} className="relative min-h-0 flex-1 overflow-auto bg-white" data-testid="question-area" onClick={() => menu && setMenu(false)}>
             {a.paused && !review ? (

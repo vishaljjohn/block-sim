@@ -19,7 +19,7 @@ interface Pair {
 function pairs(): Pair[] {
   if (!fs.existsSync(ROOT)) return [];
   const out: Pair[] = [];
-  for (const d of fs.readdirSync(ROOT).filter((x) => !x.startsWith('.')).sort()) {
+  for (const d of fs.readdirSync(ROOT).filter((x) => !x.startsWith('.') && fs.statSync(path.join(ROOT, x)).isDirectory()).sort()) {
     const files = fs.readdirSync(path.join(ROOT, d));
     for (const f of files) {
       const m = /^(\d+)\s*Q\.pdf$/i.exec(f);

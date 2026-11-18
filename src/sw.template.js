@@ -1,16 +1,17 @@
 /* Test Simulator service worker. Generated at build time; do not edit dist/sw.js by hand. */
 const BASE = "__BASE__";
+const CHANNEL = "__CHANNEL__";
 const BUILD_ID = "__BUILD_ID__";
 const FILES = "__FILES__";
 // cache names kept from the first version, so old caches are cleaned up on update
-const PREFIX = 'blocksim-stable-';
+const PREFIX = 'blocksim-' + CHANNEL + '-';
 const CACHE = PREFIX + BUILD_ID;
 
 function inScope(url) {
   if (url.origin !== self.location.origin) return false;
   if (!url.pathname.startsWith(BASE)) return false;
-  // the retired beta link has its own small page that sends people here
-  if (url.pathname.startsWith(BASE + 'beta/')) return false;
+  // the live site's worker never touches the beta under /beta/
+  if (CHANNEL === 'stable' && url.pathname.startsWith(BASE + 'beta/')) return false;
   return true;
 }
 
