@@ -8,6 +8,7 @@ import { initFolderSync } from './lib/folder';
 import { resumeBackgroundText } from './lib/analyze';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Shell } from './ui/Shell';
+import { Dashboard } from './pages/Dashboard';
 import { bringInBetaHistory } from './lib/betaMerge';
 import { go, useRoute } from './ui/hooks';
 import { Home } from './pages/Home';
@@ -135,9 +136,10 @@ export function App() {
     screen = <Missed />;
     wide = true;
   }
+  else if (p0 === 'exams') screen = <Home />;
   else if (p0 === 'settings') screen = <SettingsPage />;
   else if (p0 === 'faq') screen = <Faq />;
-  else screen = <Home />;
+  else screen = <Dashboard />;
 
   const name = route.parts.slice(0, 2).join('/') || 'home';
   // dark mode inverts only the exam screen; the rest of the app has real dark colors

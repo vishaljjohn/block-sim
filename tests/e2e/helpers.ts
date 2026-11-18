@@ -26,7 +26,7 @@ export async function skipWelcome(page: Page) {
     await skip.waitFor({ timeout: 4000 });
     await skip.click();
   } catch {}
-  await expect(page.getByTestId('home')).toBeVisible();
+  await expect(page.getByTestId('dashboard')).toBeVisible();
 }
 
 export async function importExam(page: Page, opts: { file: string; name: string; key?: { pdf?: string; paste?: string; inline?: boolean; samePage?: number }; layout?: 'auto' | 'fixed'; perQuestion?: number }) {

@@ -19,7 +19,7 @@ test('import a whole folder: pairs question and answer PDFs into subject folders
   await expect(page.locator('[data-testid="folder-state"][data-state="failed"]')).toHaveCount(0);
   // Surgery 1 has a full key → ready; the others have no key → need a check
   await expect(page.locator('[data-testid="folder-row"]').filter({ hasText: 'Surgery' }).getByTestId('folder-state')).toHaveAttribute('data-state', 'done');
-  await page.goto('./#/');
+  await page.goto('./#/exams');
   await expect(page.getByTestId('folder-Surgery')).toBeVisible();
   await expect(page.getByTestId('folder-OBGYN')).toBeVisible();
 });

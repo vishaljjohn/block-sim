@@ -161,7 +161,7 @@ test('item box hides the question list; full screen button; type minutes; tutor 
 
 test('folder picker: pick a listed folder or type a new one', async ({ page }) => {
   await freshStart(page);
-  await page.goto('./#/');
+  await page.goto('./#/exams');
   await page.getByTestId('exam-row-demo-exam').getByText('Move').click();
   await page.getByTestId('move-folder').selectOption('Surgery');
   await page.getByRole('dialog').getByRole('button', { name: 'Move', exact: true }).click();

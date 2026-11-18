@@ -128,7 +128,7 @@ test('second tab shows "open elsewhere" and can take over', async ({ page, conte
   await p2.goto(page.url());
   await expect(p2.getByTestId('tab-guard')).toBeVisible();
   await p2.getByTestId('take-over').click();
-  await expect(p2.getByTestId('home')).toBeVisible();
+  await expect(p2.getByTestId('dashboard')).toBeVisible();
   await expect(page.getByTestId('tab-guard')).toBeVisible();
   await p2.close();
 });
@@ -211,11 +211,11 @@ test('works offline after the first visit; online, the page always comes fresh f
   const fromNet = page.waitForResponse((r) => r.request().resourceType() === 'document');
   await page.reload();
   expect((await fromNet).status()).toBe(200);
-  await expect(page.getByTestId('home')).toBeVisible();
+  await expect(page.getByTestId('dashboard')).toBeVisible();
   // offline: the saved copy opens
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByTestId('home')).toBeVisible();
+  await expect(page.getByTestId('dashboard')).toBeVisible();
   await expect(page.getByTestId('update-banner')).toHaveCount(0);
   await context.setOffline(false);
 });
