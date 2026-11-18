@@ -9,6 +9,10 @@ import { resumeBackgroundText } from './lib/analyze';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Shell } from './ui/Shell';
 import { Dashboard } from './pages/Dashboard';
+import { History } from './pages/History';
+import { Reports } from './pages/Reports';
+import { Notes } from './pages/Notes';
+import { Queue } from './pages/Queue';
 import { bringInBetaHistory } from './lib/betaMerge';
 import { go, useRoute } from './ui/hooks';
 import { Home } from './pages/Home';
@@ -137,6 +141,10 @@ export function App() {
     wide = true;
   }
   else if (p0 === 'exams') screen = <Home />;
+  else if (p0 === 'history') screen = <History />;
+  else if (p0 === 'reports') screen = <Reports />;
+  else if (p0 === 'notes') screen = <Notes />;
+  else if (p0 === 'queue') screen = <Queue />;
   else if (p0 === 'settings') screen = <SettingsPage />;
   else if (p0 === 'faq') screen = <Faq />;
   else screen = <Dashboard />;

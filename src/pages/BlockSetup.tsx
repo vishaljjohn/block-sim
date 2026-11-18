@@ -7,9 +7,32 @@ import { buildMissedBank } from '../lib/missed';
 import { saveAttempt } from '../lib/store';
 import { fmtDuration } from '../lib/timer';
 import { go, useLive } from '../ui/hooks';
-import { H1, H2 } from '../ui/Shell';
+import { H1 } from '../ui/Shell';
+import { questionStats } from '../lib/stats';
 
-type Sel = 'all' | 'range' | 'random' | 'missed' | 'marked';
+function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+  return (
+    <section className="card mb-5 p-6">
+      <h2 className="mb-4 flex items-baseline gap-3 text-[18px] font-bold"><span className="mono text-[13px]" style={{ color: 'var(--brand)' }}>{n}.</span>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+type Sel = 'all' | 'range' | 'random' | 'missed' | 'marked' | 'unused' | 'used' | 'correct' | 'incorrect' | 'custom';
+
+/** "1-5, 9, 12" → question numbers */
+export function parseNumbers(t: string): Set<number> {
+  const out = new Set<number>();
+  for (const part of t.split(/[,\s]+/)) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(part.trim());
+    if (!m) continue;
+    const a = +m[1];
+    const b = m[2] ? +m[2] : a;
+    for (let n = Math.min(a, b); n <= Math.max(a, b) && n - Math.min(a, b) < 5000; n++) out.add(n);
+  }
+  return out;
+}
 type Preset = 'standard' | 'shelf' | 'custom';
 export const BANK_KEY = STORAGE_PREFIX + 'bank-qids';
 
@@ -30,6 +53,8 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   const [blocks, setBlocks] = useState(1);
   const [breakMin, setBreakMin] = useState('');
   const [busy, setBusy] = useState(false);
+  const [custom, setCustom] = useState('');
+  const [name, setName] = useState('');
 
   const exam: Exam | undefined = exams?.find((e) => e.id === examId);
   const bankIds: string[] = useMemo(() => {
@@ -44,6 +69,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     if (exam && to === 0) setTo(exam.questions.length);
   }, [exam?.id]);
 
+  const qs = useMemo(() => questionStats(attempts ?? []), [attempts]);
   const rows = useMemo(() => (attempts && reviews ? buildMissedBank(attempts, reviews) : []), [attempts, reviews]);
   if (!exams || !attempts || !reviews) return <div className="text-sm">Loading…</div>;
   if (!bank && !exam) return <div>This exam was not found. <a className="link" href="#/">Back to the library</a></div>;
@@ -63,6 +89,11 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     else if (sel === 'range') pool = all.filter((p) => p.q.number >= from && p.q.number <= to);
     else if (sel === 'missed') pool = all.filter((p) => missedIds.has(p.q.id));
     else if (sel === 'marked') pool = all.filter((p) => markedIds.has(p.q.id));
+    else if (sel === 'unused') pool = all.filter((p) => !qs.get(p.q.id)?.used);
+    else if (sel === 'used') pool = all.filter((p) => qs.get(p.q.id)?.used);
+    else if (sel === 'correct') pool = all.filter((p) => qs.get(p.q.id)?.last === 'correct');
+    else if (sel === 'incorrect') pool = all.filter((p) => { const l = qs.get(p.q.id)?.last; return l === 'incorrect' || l === 'omitted'; });
+    else if (sel === 'custom') { const ns = parseNumbers(custom); pool = all.filter((p) => ns.has(p.q.number)); }
   }
   const presetCount = preset === 'standard' ? 40 : preset === 'shelf' ? 110 : null;
   const wanted = sel === 'random' && !bank ? randomN : presetCount;
@@ -90,9 +121,9 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     }
     if (order === 'random') picks = shuffle(picks);
     picks = picks.slice(0, count);
-    const name = bank ? `Missed questions quiz (${count})` : exam!.name;
+    const nm = name.trim() || (bank ? `Missed questions quiz (${count})` : exam!.name);
     const a = createAttempt(
-      name,
+      nm,
       picks,
       mode,
       { secPerQ: timed ? sec : null, confidence: false, preset, order, selection: bank ? 'bank' : sel, breakMinutes: breakMin.trim() ? Math.max(0, parseFloat(breakMin)) : null },
@@ -111,14 +142,22 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   return (
     <div data-testid="block-setup">
       <a className="link text-sm" href={bank ? '#/missed' : `#/exam/${examId}`}>← Back</a>
-      <div className="eyebrow mb-1 mt-3">New block</div>
-      <H1>{bank ? 'Quiz me on missed questions' : exam!.name}</H1>
+      <div className="mt-3" />
+      <H1 sub={bank ? 'Quiz me on missed questions' : 'Choose questions, set the parameters, and begin.'}>Test Composer</H1>
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0">
 
       {!bank && (
-        <>
-          <H2>Questions</H2>
+        <Step n="I" title="Exam">
+          <select className="field w-full max-w-lg" value={exam!.id} onChange={(e) => go(`/setup?exam=${e.target.value}`, true)} data-testid="setup-exam">
+            {[...exams].sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true })).map((e) => (
+              <option key={e.id} value={e.id}>{e.subject ? `${e.subject} · ` : ''}{e.name}</option>
+            ))}
+          </select>
+        </Step>
+      )}
+      {!bank && (
+        <Step n="II" title="Question filters">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             {R('all', 'sel-all', <>All {exam!.questions.length} questions</>)}
             {R('range', 'sel-range', <>
@@ -134,17 +173,30 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
             </>)}
             {R('missed', 'sel-missed', <>Missed only ({exam!.questions.filter((q) => missedIds.has(q.id)).length})</>)}
             {R('marked', 'sel-marked', <>Marked only ({exam!.questions.filter((q) => markedIds.has(q.id)).length})</>)}
+            {R('unused', 'sel-unused', <>Unused ({exam!.questions.filter((q) => !qs.get(q.id)?.used).length})</>)}
+            {R('used', 'sel-used', <>Used ({exam!.questions.filter((q) => qs.get(q.id)?.used).length})</>)}
+            {R('correct', 'sel-correct', <>Last answered correctly ({exam!.questions.filter((q) => qs.get(q.id)?.last === 'correct').length})</>)}
+            {R('incorrect', 'sel-incorrect', <>Last incorrect or omitted ({exam!.questions.filter((q) => { const l = qs.get(q.id)?.last; return l === 'incorrect' || l === 'omitted'; }).length})</>)}
+            {R('custom', 'sel-custom', <>
+              Question numbers
+              <input className="field mx-1 w-40" placeholder="e.g. 1-5, 9, 12" value={custom} onChange={(e) => { setCustom(e.target.value); setSel('custom'); }} data-testid="custom-numbers" />
+            </>)}
           </div>
-        </>
+        </Step>
       )}
 
-      <H2>Order</H2>
+      <Step n={bank ? 'I' : 'III'} title="Parameters">
+      <label className="mb-4 block text-sm">
+        <span className="eyebrow mb-1 block">Test name</span>
+        <input className="field w-full max-w-lg" placeholder={bank ? 'Missed questions quiz' : exam!.name} value={name} onChange={(e) => setName(e.target.value)} data-testid="test-name" />
+      </label>
+      <div className="eyebrow mb-2">Order</div>
       <div className="grid grid-cols-2 gap-2 text-sm sm:max-w-md">
         <label className="choice items-center"><input type="radio" name="order" checked={order === 'sequential'} onChange={() => setOrder('sequential')} /> In order</label>
         <label className="choice items-center"><input type="radio" name="order" checked={order === 'random'} onChange={() => setOrder('random')} data-testid="order-random" /> Shuffled</label>
       </div>
 
-      <H2>Mode</H2>
+      <div className="eyebrow mb-2 mt-5">Mode</div>
       <div className="grid gap-2 text-sm md:grid-cols-2">
         <label className="choice"><input type="radio" name="mode" checked={!tutor} onChange={() => { setTutor(false); setTimed(true); }} data-testid="mode-exam" /> <span><b className="block">Test mode</b><span className="muted">Answers and explanations stay locked until the block ends, like the real exam.</span></span></label>
         <label className="choice"><input type="radio" name="mode" checked={tutor} onChange={() => setTutor(true)} data-testid="mode-tutor" /> <span><b className="block">Tutor mode</b><span className="muted">See the correct answer and explanation after each question.</span></span></label>
@@ -155,7 +207,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       </div>
       <p className="muted mt-2 text-xs">You can switch either one in the middle of a block: click the clock at the bottom of the test screen.</p>
 
-      <H2>Length and timing</H2>
+      <div className="eyebrow mb-2 mt-5">Length and timing</div>
       <div className="space-y-2 text-sm">
         <label className="choice flex-wrap items-center"><input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" /> <span><b>Custom</b>:</span>
           <input className="field mx-1 w-16" type="number" min={10} max={3600} value={secPerQ} disabled={!timed} onChange={(e) => { setSecPerQ(Math.max(5, parseInt(e.target.value, 10) || DEFAULT_SEC_PER_Q)); setPreset('custom'); }} data-testid="sec-per-q" aria-label="Seconds per question" />
@@ -172,10 +224,16 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
           </label>
         )}
       </div>
+      </Step>
 
       </div>
-      <aside className="card sticky top-20 mt-2 p-5 lg:mt-8">
-      <div className="eyebrow mb-2">Summary</div>
+      <aside className="card accent-top sticky top-24 p-6">
+      <h2 className="mb-3 flex items-baseline gap-3 text-[18px] font-bold"><span className="mono text-[13px]" style={{ color: 'var(--brand)' }}>{bank ? 'II' : 'IV'}.</span>Examination dossier</h2>
+      <dl className="mono mb-4 space-y-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+        <div className="flex justify-between gap-2"><dt>Exam</dt><dd className="truncate text-right">{bank ? 'Missed questions' : exam!.name}</dd></div>
+        <div className="flex justify-between gap-2"><dt>Mode</dt><dd>{tutor ? 'Tutor' : 'Test'} · {timed ? 'Timed' : 'Untimed'}</dd></div>
+        <div className="flex justify-between gap-2"><dt>Order</dt><dd>{order === 'random' ? 'Random' : 'Sequential'}</dd></div>
+      </dl>
       <div className="text-sm" data-testid="setup-summary">
         <b>{count}</b> question{count === 1 ? '' : 's'}
         {plan.length > 1 && <> in <b>{plan.length}</b> blocks ({plan.map((b) => b.count).join(' + ')})</>}
@@ -186,7 +244,7 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       </div>
       <div className="mt-4">
         <button className="btn-primary w-full px-6 py-2.5 text-base" disabled={!count || busy} onClick={start} data-testid="start-block">
-          Start block
+          Begin test →
         </button>
         {!count && (
           <span className="mt-2 block text-sm text-red-700">

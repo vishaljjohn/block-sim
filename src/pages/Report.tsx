@@ -10,6 +10,7 @@ import { Check, Cross, IconFlag } from '../ui/icons';
 import { MISS_REASONS } from '../types';
 import { Donut, ScoreBar } from '../ui/ScoreBar';
 import { ExportPdfDialog } from '../ui/ExportPdfDialog';
+import { HBars } from '../ui/paperCharts';
 import { backupFileName, useFolderStatus } from './Home';
 
 type Show = 'correct' | 'incorrect' | 'marked' | 'omitted';
@@ -57,34 +58,61 @@ export function Report({ attemptId }: { attemptId: string }) {
   return (
     <div data-testid="report">
       {pdf && <ExportPdfDialog attempt={a} onClose={() => setPdf(false)} />}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <a className="link text-sm" href={a.examId ? `#/exam/${a.examId}` : '#/'}>
-            ← {a.examId ? 'Previous tests' : 'Library'}
-          </a>
-          <div className="flex flex-wrap gap-2">
-            <button className="btn" onClick={() => setPdf(true)} data-testid="report-pdf">Export as PDF</button>
-            <button className="btn" onClick={csv} data-testid="report-csv">Export CSV</button>
-            <a className="btn-primary" href={`#/review/${a.id}`} data-testid="review-all">Review Test</a>
+      <a className="link text-sm" href="#/history">← Test History</a>
+      <div className="card accent-top mt-3 p-7" data-testid="report-head">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="min-w-0">
+            <div className="eyebrow mb-1">Examination report</div>
+            <h1 className="text-[28px] font-bold leading-tight">{a.name}</h1>
+            <div className="mono mt-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+              {exam?.subject ? `${exam.subject.toUpperCase()} · ` : ''}
+              {exam && exam.name !== a.name ? `${exam.name} · ` : ''}
+              {fmtDateTime(a.completedAt)} · {fmtDuration(s.timeMs)} · {modeChips.join(' / ')}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="eyebrow">Final score</div>
+            <div className="mono text-[48px] font-bold leading-none" style={{ color: s.pct >= 70 ? 'var(--good)' : s.pct >= 50 ? 'var(--warn)' : 'var(--bad)' }}>{Math.round(s.pct)}%</div>
+            <div className="mono text-[12px]" style={{ color: 'var(--ink-2)' }}>{s.correct} / {s.total} correct</div>
           </div>
         </div>
-        <h1 className="text-2xl font-bold">{a.name}</h1>
-        <div className="text-sm text-gray-600">
-          {exam?.subject ? `${exam.subject} · ` : ''}
-          {fmtDateTime(a.completedAt)}
+        <div className="mt-5 flex flex-wrap gap-2 border-t pt-5" style={{ borderColor: 'var(--line)' }}>
+          <a className="btn" href={`#/review/${a.id}?filter=incorrect`} data-testid="review-incorrect">Find incorrect</a>
+          <a className="btn" href={`#/review/${a.id}`}>All questions</a>
+          <a className="btn-primary" href={`#/review/${a.id}`} data-testid="review-all">Review Test</a>
+          <span className="ml-auto" />
+          <button className="btn" onClick={() => setPdf(true)} data-testid="report-pdf">Export as PDF</button>
+          <button className="btn" onClick={csv} data-testid="report-csv">Export CSV</button>
         </div>
+      </div>
 
-        <div className="mt-4 flex gap-6 border-b border-gray-200" role="tablist">
+      <div className="card mt-5 p-6">
+
+        <div className="flex gap-6 border-b" style={{ borderColor: 'var(--line)' }} role="tablist">
           {(['results', 'analysis'] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} className="-mb-px border-b-2 pb-2 text-[15px]" style={{ borderColor: tab === t ? 'var(--brand, #1c4973)' : 'transparent', color: tab === t ? 'var(--ink, #111)' : 'var(--ink-3, #6b7280)', fontWeight: tab === t ? 600 : 400 }} onClick={() => setTab(t)} data-testid={`tab-${t}`}>
-              {t === 'results' ? 'Test Results' : 'Test Analysis'}
+              {t === 'results' ? 'Overview' : 'Analysis'}
             </button>
           ))}
         </div>
 
         {tab === 'results' ? (
           <>
-            <div className="mt-5 grid gap-6 md:grid-cols-2">
+            <div className="mt-5" data-testid="response-sheet">
+              <div className="eyebrow mb-2">Response sheet</div>
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(46px, 1fr))' }}>
+                {a.items.map((it, i) => {
+                  const r = isBlank(it) ? 'blank' : isCorrect(it) ? 'correct' : 'incorrect';
+                  return (
+                    <a key={i} href={`#/review/${a.id}?i=${i}`} className="mono flex flex-col items-center border py-1 text-[11px] hover:opacity-80" title={`Question ${i + 1}: ${r}`} style={{ borderColor: r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : 'var(--line-strong)', background: r === 'correct' ? 'color-mix(in srgb, var(--good) 10%, var(--surface))' : r === 'incorrect' ? 'color-mix(in srgb, var(--bad) 10%, var(--surface))' : 'var(--surface)' }}>
+                      <span style={{ color: 'var(--ink-3)' }}>{i + 1}{it.marked ? '⚑' : ''}</span>
+                      <b style={{ color: r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : 'var(--ink-3)' }}>{it.answer ?? '–'}</b>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div>
                 <div className="mb-2 text-[15px] text-gray-700">Your Score</div>
                 <div className="mb-1 text-3xl font-bold" style={{ color: s.pct >= 70 ? '#15803d' : s.pct >= 50 ? '#b45309' : '#b91c1c' }} data-testid="score-pct">
@@ -230,6 +258,12 @@ export function Report({ attemptId }: { attemptId: string }) {
                 </table>
               </div>
             </div>
+            {s.byTag.length > 0 && (
+              <div className="mt-6" data-testid="subject-analysis">
+                <div className="eyebrow mb-3">Subject analysis</div>
+                <HBars rows={s.byTag.map((t) => ({ name: `${t.label} (${t.correct}/${t.total})`, value: t.total ? (t.correct / t.total) * 100 : null }))} />
+              </div>
+            )}
             <div className="mt-6 text-[15px] text-gray-700">Time per question</div>
             <TimeChart times={s.times} />
             <div className="text-xs text-gray-600">Green = correct, red = incorrect, grey = omitted. Hover a bar for details.</div>
