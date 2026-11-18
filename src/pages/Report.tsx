@@ -17,12 +17,39 @@ import { HBars } from '../ui/paperCharts';
 import { PaperModal } from '../ui/PaperModal';
 import { QuestionView } from '../ui/QuestionView';
 import { backupFileName, useFolderStatus } from './Home';
+import { questionText } from './Missed';
+import { HIGHLIGHT_COLORS, HIGHLIGHT_SWATCH, useDisplay } from '../lib/display';
+import { patchDisplay } from '../lib/store';
 
 const clock = (ms: number) => {
   const t = Math.round(ms / 1000);
   const h = Math.floor(t / 3600);
   return `${h ? `${h}h:` : ''}${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}m:${String(t % 60).padStart(2, '0')}s`;
 };
+/** Highlight mode and colour, as in the review screen's settings. */
+function HighlightSettings() {
+  const d = useDisplay();
+  return (
+    <div className="px-1" data-testid="report-hl-settings">
+      <div className="mb-2 text-[14px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Settings</div>
+      <div className="mb-2 flex items-center gap-2 text-[12px]">
+        <span style={{ color: 'var(--ink-2)' }}>Highlight:</span>
+        {(['quick', 'manual'] as const).map((m) => (
+          <button key={m} className="rounded px-2 py-0.5 font-semibold" style={d.highlightMode === m ? { background: '#fef3c7', color: '#9a6304', border: '1px solid #f3dfb4' } : { color: 'var(--ink-2)', border: '1px solid var(--line)' }} onClick={() => void patchDisplay({ highlightMode: m })}>
+            {m === 'quick' ? '⚡ Quick' : '✎ Manual'}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 text-[12px]">
+        <span style={{ color: 'var(--ink-2)' }}>Color:</span>
+        {HIGHLIGHT_COLORS.map((c) => (
+          <button key={c} aria-label={`${c} highlight`} className="h-6 w-8" style={{ background: HIGHLIGHT_SWATCH[c], outline: d.highlightColor === c ? '2px solid var(--ink)' : 'none', outlineOffset: 1 }} onClick={() => void patchDisplay({ highlightColor: c })} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type Section = 'overview' | 'review' | 'subjects';
 type RFilter = 'all' | 'incorrect' | 'correct' | 'marked';
 
@@ -41,11 +68,26 @@ function ReviewRow({ a, i, exams }: { a: Attempt; i: number; exams: Map<string, 
   }, [open, exam?.id]);
   const r = isBlank(it) ? 'omitted' : isCorrect(it) ? 'correct' : 'incorrect';
   const col = r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : 'var(--ink-2)';
-  const toggleMark = async () => {
+  const edit = async (f: (x: Attempt['items'][number]) => Attempt['items'][number]) => {
     const fresh = await db.attempts.get(a.id);
     if (!fresh) return;
-    fresh.items[i] = { ...fresh.items[i], marked: !fresh.items[i].marked };
+    fresh.items[i] = f(fresh.items[i]);
     await saveAttempt(fresh);
+  };
+  const toggleMark = () => edit((x) => ({ ...x, marked: !x.marked }));
+  const [copied, setCopied] = useState('');
+  const copy = async (withAnswer: boolean) => {
+    if (!exam) return;
+    const pages = new Map((texts ?? []).map((t) => [`${exam.id}:${t.page}`, t]));
+    const body = questionText(exam, it.qid, pages).trim() || `${exam.name}, question ${it.number}`;
+    const extra = withAnswer ? `\n\nYour answer: ${it.answer ?? '—'}\nCorrect answer: ${it.key ?? q?.answer ?? '—'}${q?.explanation ? `\n\nExplanation:\n${q.explanation}` : ''}` : '';
+    try {
+      await navigator.clipboard.writeText(body + extra);
+      setCopied(withAnswer ? 'Copied with answer' : 'Copied');
+    } catch {
+      setCopied('Could not copy');
+    }
+    setTimeout(() => setCopied(''), 1800);
   };
   return (
     <div className="mb-3 border-2" style={{ borderColor: 'var(--rule)', background: 'var(--surface)' }} data-testid={`report-row-${i + 1}`} data-result={r === 'omitted' ? 'blank' : r}>
@@ -58,7 +100,14 @@ function ReviewRow({ a, i, exams }: { a: Attempt; i: number; exams: Map<string, 
       </button>
       {open && (
         <div className="px-8 pb-6">
-          <div className="mb-3 flex items-center justify-end gap-3 text-[13px]">
+          <div className="mb-3 flex flex-wrap items-center justify-end gap-3 text-[13px]">
+            {it.highlights.length > 0 && (
+              <button className="font-semibold" style={{ color: 'var(--ink-2)' }} onClick={() => void edit((x) => ({ ...x, highlights: [] }))} data-testid="row-clear-highlights">🗑 Clear highlights</button>
+            )}
+            <span className="flex border" style={{ borderColor: 'var(--line)' }}>
+              <button className="px-2.5 py-1 font-semibold" onClick={() => void copy(false)} data-testid="row-copy">⧉ {copied || 'Copy question'}</button>
+              <button className="border-l px-2 py-1" style={{ borderColor: 'var(--line)' }} onClick={() => void copy(true)} title="Copy with your answer, the correct answer and the explanation">+ answer</button>
+            </span>
             <button className="flex items-center gap-1 font-semibold" onClick={() => void toggleMark()} data-testid="row-mark">
               <IconFlag size={12} /> {it.marked ? 'Unmark' : 'Mark'}
             </button>
@@ -72,7 +121,7 @@ function ReviewRow({ a, i, exams }: { a: Attempt; i: number; exams: Map<string, 
             <dt style={{ color: 'var(--ink-2)' }}>Q #</dt>
             <dd>{it.number}</dd>
           </dl>
-          <div className="mb-4 overflow-x-auto">{doc && exam && q ? <QuestionView exam={exam} question={q} doc={doc} texts={textMap} width={620} readOnly revealKey={it.key ?? ''} item={it} /> : <div className="text-[13px]" style={{ color: 'var(--ink-3)' }}>{exam ? 'Loading the page…' : 'This exam is no longer in the library.'}</div>}</div>
+          <div className="mb-4 overflow-x-auto">{doc && exam && q ? <QuestionView exam={exam} question={q} doc={doc} texts={textMap} width={620} revealKey={it.key ?? ''} item={it} onHighlights={(h) => void edit((x) => ({ ...x, highlights: h }))} onStrike={(l) => void edit((x) => ({ ...x, strikes: x.strikes.includes(l) ? x.strikes.filter((y) => y !== l) : [...x.strikes, l] }))} /> : <div className="text-[13px]" style={{ color: 'var(--ink-3)' }}>{exam ? 'Loading the page…' : 'This exam is no longer in the library.'}</div>}</div>
           <div className="mono mb-3 text-[13px]">
             Your answer: <b style={{ color: col }}>{it.answer ?? '—'}</b> · Correct answer: <b style={{ color: 'var(--good)' }}>{it.key ?? q?.answer ?? '—'}</b>
             {classifyChange(it) && <> · changed {classifyChange(it)}</>}
@@ -96,6 +145,7 @@ export function Report({ attemptId }: { attemptId: string }) {
   const [rf, setRf] = useState<RFilter>('all');
   const [msg, setMsg] = useState('');
   const [pdf, setPdf] = useState(false);
+  const [idsMenu, setIdsMenu] = useState(false);
   const [content, setContent] = useState(false);
   const [naming, setNaming] = useState(false);
   const [nm, setNm] = useState('');
@@ -172,10 +222,57 @@ export function Report({ attemptId }: { attemptId: string }) {
           <div className="flex flex-wrap justify-end gap-2">
             <a className="btn btn-caps" href={`#/review/${a.id}?filter=incorrect`} data-testid="review-incorrect">Find incorrect questions</a>
             <a className="btn btn-caps" href={`#/review/${a.id}`}>All questions</a>
+            <span className="relative">
+              <button className="btn btn-caps" onClick={() => setIdsMenu((m) => !m)} aria-expanded={idsMenu} data-testid="copy-ids">⧉ Copy IDs ⌄</button>
+              {idsMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setIdsMenu(false)} />
+                  <div className="absolute left-0 top-full z-40 mt-1 w-[240px] border-2 p-3 text-[13px] shadow-lg" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }} role="menu" data-testid="copy-ids-menu">
+                    <div className="mono mb-1.5 flex justify-between text-[10px] font-bold uppercase" style={{ color: 'var(--ink-2)' }}>
+                      <span>Copy question #s by result</span>
+                      <span className="font-normal normal-case">{s.total} total</span>
+                    </div>
+                    <div className="mb-2 flex h-1">
+                      <span style={{ width: `${(s.wrong / Math.max(1, s.total)) * 100}%`, background: 'var(--bad)' }} />
+                      <span style={{ flex: 1, background: 'var(--good)' }} />
+                    </div>
+                    {(
+                      [
+                        ['All questions', a.items, 'linear-gradient(90deg,var(--bad) 50%,var(--good) 50%)'],
+                        ['Incorrect', a.items.filter((x) => !isBlank(x) && !isCorrect(x)), 'var(--bad)'],
+                        ['Correct', a.items.filter(isCorrect), 'var(--good)'],
+                        ['Unanswered', a.items.filter(isBlank), 'var(--line)'],
+                      ] as [string, typeof a.items, string][]
+                    ).map(([l, list, c]) => (
+                      <button
+                        key={l}
+                        className="flex w-full items-center gap-2 py-1.5 text-left font-semibold disabled:opacity-40"
+                        disabled={!list.length}
+                        onClick={async () => {
+                          const nums = list.map((x) => (a.examId ? `${x.number}` : `${exams.get(x.examId)?.name ?? 'Exam'} Q${x.number}`)).join(', ');
+                          try {
+                            await navigator.clipboard.writeText(nums);
+                            setMsg(`Copied ${list.length} question number${list.length === 1 ? '' : 's'}.`);
+                          } catch {
+                            setMsg('Could not copy.');
+                          }
+                          setIdsMenu(false);
+                        }}
+                      >
+                        <span className="h-2.5 w-2.5" style={{ background: c }} />
+                        {l}
+                        <span className="mono ml-auto text-[11px] font-normal">{list.length}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </span>
             <button className="btn btn-caps" onClick={() => setPdf(true)} data-testid="report-pdf">Export PDF</button>
             <button className="btn btn-caps" onClick={csv} data-testid="report-csv">CSV</button>
             <a className="btn-primary btn-caps" href={`#/review/${a.id}`} data-testid="review-all">Review in test mode</a>
           </div>
+          {msg && <div className="text-[12px]" style={{ color: 'var(--ink-2)' }} data-testid="report-msg">{msg}</div>}
         </div>
       </div>
 
@@ -210,6 +307,7 @@ export function Report({ attemptId }: { attemptId: string }) {
             </dl>
             <button className="btn mt-4 w-full" onClick={() => setContent(true)} data-testid="content-list">☰ Folders/Exams List</button>
           </div>
+          {section === 'review' && <HighlightSettings />}
         </div>
 
         <div className="min-w-0">

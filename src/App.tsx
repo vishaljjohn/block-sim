@@ -13,6 +13,8 @@ import { History } from './pages/History';
 import { Reports } from './pages/Reports';
 import { Notes } from './pages/Notes';
 import { Queue } from './pages/Queue';
+import { LibraryPage } from './pages/Library';
+import { VideosPage } from './pages/Videos';
 import { bringInBetaHistory } from './lib/betaMerge';
 import { go, useRoute } from './ui/hooks';
 import { Home } from './pages/Home';
@@ -145,6 +147,13 @@ export function App() {
   else if (p0 === 'reports') screen = <Reports />;
   else if (p0 === 'notes') screen = <Notes />;
   else if (p0 === 'queue') screen = <Queue />;
+  else if (p0 === 'library') {
+    screen = <LibraryPage book={route.query.has('b') ? route.query.get('b') : null} doc={route.query.get('d')} />;
+    wide = true;
+  } else if (p0 === 'videos') {
+    screen = <VideosPage folder={route.query.has('f') ? route.query.get('f') : null} video={route.query.get('v')} />;
+    wide = true;
+  }
   else if (p0 === 'settings') screen = <SettingsPage />;
   else if (p0 === 'faq') screen = <Faq />;
   else screen = <Dashboard />;

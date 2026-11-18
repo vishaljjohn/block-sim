@@ -11,7 +11,7 @@ import { exportBackup } from '../lib/backup';
 import { downloadBlob } from '../lib/csv';
 import { daysAgo, fmtDate, go, useLive } from '../ui/hooks';
 import { H1, H2 } from '../ui/Shell';
-import { Modal } from '../ui/panels';
+import { PaperModal } from '../ui/PaperModal';
 import { FolderPicker } from '../ui/FolderPicker';
 
 export function useFolderStatus() {
@@ -125,6 +125,7 @@ export function Home() {
   const initials = (n: string) => n.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase() + (w.length > 1 && /[a-z]/.test(w[1]!) ? w[1] : '')).join('').slice(0, 2) || '?';
   const tint = (n: string) => BADGE[[...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % BADGE.length];
   const inTab = (e: Exam) => (tab === 'progress' ? !!info(e).open || progressOf(e.questions.map((x) => x.id), qs).completedPct > 0 : tab === 'fav' ? favs.has(e.id) : true);
+  const listedAll = exams.filter((e) => inTab(e) && (!q || e.name.toLowerCase().includes(q) || catOf(e).toLowerCase().includes(q)));
   const listed = shown.filter((e) => inTab(e) && (!q || e.name.toLowerCase().includes(q) || catOf(e).toLowerCase().includes(q)));
   const counts = { all: exams.length, progress: exams.filter((e) => !!info(e).open || progressOf(e.questions.map((x) => x.id), qs).completedPct > 0).length, fav: exams.filter((e) => favs.has(e.id)).length };
   const byFolder = cats.map((c) => ({ c, list: listed.filter((e) => catOf(e) === c) })).filter((g) => g.list.length);
@@ -149,41 +150,33 @@ export function Home() {
   };
 
   const ExamRow = ({ e }: { e: Exam }) => {
-    const { done, open } = info(e);
+    const { open } = info(e);
     const isDesk = desk?.id === e.id;
     return (
-      <div className="flex flex-wrap items-center gap-4 border-b px-2 py-3.5 last:border-b-0" style={{ borderColor: 'var(--line)', background: isDesk ? 'var(--surface-2)' : undefined }} data-testid={`exam-row-${e.id}`}>
-        <Badge e={e} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <a className="serif truncate text-[16px] font-bold hover:underline" style={{ color: 'var(--ink)' }} href={`#/exam/${e.id}`}>
-              {e.name}
-            </a>
-            {isDesk && <span className="mono text-[10px] font-bold uppercase tracking-[0.5px]" style={{ color: 'var(--brand)' }}>● On your desk</span>}
-          </div>
-          <div className="mono mt-0.5 text-[12px]" style={{ color: 'var(--ink-2)' }}>
-            {e.questions.length.toLocaleString()} questions · {e.pageCount} pages{done.length > 0 && <> · {done.length} test{done.length === 1 ? '' : 's'}</>}
-            {!e.keyChecked && <span className="pill ml-2" style={{ color: 'var(--warn)' }}>check the answer key</span>}
-          </div>
-        </div>
-        <Progress e={e} />
-        <button className="p-1" title={favs.has(e.id) ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={favs.has(e.id)} onClick={() => toggleFav(e.id)} data-testid="fav" style={{ color: favs.has(e.id) ? 'var(--brand)' : 'var(--ink-3)' }}>
+      <div className="flex items-center gap-4 border-b px-2 py-3.5 last:border-b-0" style={{ borderColor: 'var(--line)', background: isDesk ? 'var(--surface-2)' : undefined }} data-testid={`exam-row-${e.id}`}>
+        <button className="flex min-w-0 flex-1 items-center gap-4 text-left" onClick={() => setDetails(e)} aria-label={`${e.name}: details`} data-testid="exam-details">
+          <Badge e={e} />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span className="serif truncate text-[16px] font-bold" style={{ color: 'var(--ink)' }}>{e.name}</span>
+              {isDesk && <span className="mono shrink-0 text-[10px] font-bold uppercase tracking-[0.5px]" style={{ color: 'var(--brand)' }}>● On your desk</span>}
+            </span>
+            <span className="block truncate text-[14px]" style={{ color: 'var(--ink)' }}>{catOf(e)}</span>
+            <span className="mono block text-[11px]" style={{ color: 'var(--ink-2)' }}>
+              {e.questions.length.toLocaleString()} questions · {e.pageCount} pages{open ? ' · test in progress' : ''}
+              {!e.keyChecked && <span className="ml-2" style={{ color: 'var(--warn)' }}>· check the answer key</span>}
+            </span>
+          </span>
+        </button>
+        <span className="hidden sm:block"><Progress e={e} /></span>
+        <button className="p-1" title={favs.has(e.id) ? 'Remove from favorites' : 'Add to favorites'} aria-label={favs.has(e.id) ? `Remove ${e.name} from favorites` : `Add ${e.name} to favorites`} aria-pressed={favs.has(e.id)} onClick={() => toggleFav(e.id)} data-testid="fav" style={{ color: favs.has(e.id) ? 'var(--brand)' : 'var(--ink-3)' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill={favs.has(e.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z" /></svg>
         </button>
-        <div className="flex items-center gap-1.5">
-          <button className="btn btn-sm btn-quiet" onClick={() => setDetails(e)} data-testid="exam-details">Details</button>
-          {open ? (
-            <>
-              <button className="btn-accent btn-sm" onClick={() => go(`/test/${open.id}`)} data-testid="resume-block">Continue →</button>
-              <button className="btn btn-sm btn-quiet" data-testid="discard-block" onClick={() => window.confirm(`Discard the unfinished block of “${e.name}”? Its answers are deleted.`) && void deleteAttempt(open.id)}>Discard</button>
-            </>
-          ) : isDesk ? (
-            <a className="btn-accent btn-sm" href={`#/setup?exam=${e.id}`} data-testid="new-attempt">Continue →</a>
-          ) : (
-            <button className="btn-primary btn-sm" onClick={() => setActiveExam(e.id)} data-testid="select-exam">Select</button>
-          )}
-          <button className="btn btn-sm btn-quiet" onClick={() => { setMove(e); setMoveTo(catOf(e) === UNSORTED ? '' : catOf(e)); }}>Move</button>
-        </div>
+        {isDesk ? (
+          <a className="btn-accent btn-sm whitespace-nowrap" href={open ? `#/test/${open.id}` : `#/setup?exam=${e.id}`} data-testid={open ? 'resume-block' : 'new-attempt'} aria-label={`Continue ${e.name}`}>Continue →</a>
+        ) : (
+          <button className="btn-primary btn-sm" onClick={() => setActiveExam(e.id)} data-testid="select-exam" aria-label={`Select ${e.name}`}>Select</button>
+        )}
       </div>
     );
   };
@@ -269,11 +262,11 @@ export function Home() {
             <nav className="w-full shrink-0 md:w-[240px]" aria-label="Folders" data-testid="folder-list">
               <button className="mb-0 block w-full p-4 text-left" style={{ background: 'var(--navy)', color: 'var(--bg)' }} onClick={() => setSel('')} data-testid="folder-all">
                 <span className="mono block text-[10px] font-bold uppercase tracking-[1.5px]" style={{ color: '#d2875c' }}>The catalogue</span>
-                <span className="serif block text-[22px] font-bold">{exams.length} exam{exams.length === 1 ? '' : 's'}</span>
+                <span className="serif block text-[22px] font-bold">{tab === 'all' && !q ? exams.length : `${listedAll.length} of ${exams.length}`} exam{exams.length === 1 ? '' : 's'}</span>
                 <span className="mono block text-[11px] opacity-80">{exams.reduce((n, e) => n + e.questions.length, 0).toLocaleString()} questions · {cats.length} folder{cats.length === 1 ? '' : 's'}</span>
               </button>
-              {cats.map((c) => {
-                const list = exams.filter((e) => catOf(e) === c);
+              {cats.filter((c) => listedAll.some((e) => catOf(e) === c)).map((c) => {
+                const list = listedAll.filter((e) => catOf(e) === c);
                 const pr = progressOf(list.flatMap((e) => e.questions.map((x) => x.id)), qs);
                 const on = current === c;
                 return (
@@ -327,20 +320,92 @@ export function Home() {
         const e = details;
         const { done, open, last } = info(e);
         const miss = missedByExam.get(e.id) ?? 0;
+        const isDesk = desk?.id === e.id;
+        const keyed = e.questions.filter((x) => x.answer).length;
+        const explained = e.questions.filter((x) => x.explanation?.trim()).length;
+        const tags = new Map<string, number>();
+        for (const x of e.questions) for (const t of x.tags) tags.set(t, (tags.get(t) ?? 0) + 1);
+        const pr = progressOf(e.questions.map((x) => x.id), qs);
         return (
-          <Modal title={e.name} onClose={() => setDetails(null)}>
-            <div className="mono mb-4 text-[12px]" style={{ color: 'var(--ink-2)' }}>{catOf(e)} · {e.questions.length} questions · {done.length} finished test{done.length === 1 ? '' : 's'}{last && <> · last {fmtDate(last.completedAt)}</>}</div>
-            <div className="grid gap-2 sm:grid-cols-2" data-testid="details-actions">
-              {open ? <a className="btn-accent" href={`#/test/${open.id}`}>Resume unfinished test</a> : <a className="btn-primary" href={`#/setup?exam=${e.id}`}>New test</a>}
-              <a className="btn" href={`#/exam/${e.id}`}>All tests and settings</a>
-              {last && <a className="btn" href={`#/report/${last.id}`}>Latest results</a>}
-              {last && <a className="btn" href={`#/review/${last.id}`}>Review latest</a>}
+          <PaperModal
+            title={e.name}
+            width={880}
+            onClose={() => setDetails(null)}
+            testId="exam-details-dialog"
+            footer={
+              <>
+                {isDesk ? (
+                  <a className="btn-accent" href={open ? `#/test/${open.id}` : `#/setup?exam=${e.id}`}>Continue →</a>
+                ) : (
+                  <button className="btn-primary" onClick={() => { setActiveExam(e.id); setDetails(null); }} data-testid="details-select">Select</button>
+                )}
+                <button className="btn" onClick={() => setDetails(null)}>Close</button>
+              </>
+            }
+          >
+            <p className="-mt-1 mb-5 text-[14px]" style={{ color: 'var(--ink-2)' }}>
+              {catOf(e)} · imported {fmtDate(e.createdAt)}{e.sourceName ? ` from ${e.sourceName}` : ''}
+            </p>
+            <div className="mb-6 border p-4" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+              <div className="mb-3 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Dossier</div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {[
+                  ['Total Questions', e.questions.length.toLocaleString()],
+                  ['Pages', String(e.pageCount)],
+                  ['Your progress', `${Math.round(pr.completedPct)}% done`],
+                  ['Folder', catOf(e)],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <div className="text-[13px] font-semibold" style={{ color: 'var(--ink-2)' }}>{k}</div>
+                    <div className="mono truncate text-[18px] font-bold">{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mb-3 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Syllabus Overview</div>
+            <div className="mb-6 grid gap-6 sm:grid-cols-2">
+              <div>
+                <div className="eyebrow mb-2 border-b-2 pb-1" style={{ borderColor: 'var(--line)' }}>Contents</div>
+                {[
+                  ['Questions with an answer', keyed],
+                  ['Questions with an explanation', explained],
+                  ['Answered by you', pr.answered],
+                  ['Correct', pr.correct],
+                  ['Incorrect', pr.incorrect],
+                  ['Finished tests', done.length],
+                ].map(([k, v]) => (
+                  <div key={k as string} className="flex justify-between py-1.5 text-[14px] font-semibold"><span>{k}</span><span className="mono font-normal">{v}</span></div>
+                ))}
+              </div>
+              <div>
+                <div className="eyebrow mb-2 border-b-2 pb-1" style={{ borderColor: 'var(--line)' }}>Tags</div>
+                {tags.size ? (
+                  [...tags.entries()].sort((x, y) => y[1] - x[1]).slice(0, 30).map(([t, n]) => (
+                    <div key={t} className="flex justify-between gap-2 py-1.5 text-[14px] font-semibold"><span className="truncate">{t}</span><span className="mono font-normal">{n}</span></div>
+                  ))
+                ) : (
+                  <div className="py-1.5 text-[13px]" style={{ color: 'var(--ink-3)' }}>No tags yet. Add them on the answer key screen.</div>
+                )}
+              </div>
+            </div>
+            <div className="eyebrow mb-2 border-b-2 pb-1" style={{ borderColor: 'var(--line)' }}>Actions</div>
+            <div className="flex flex-wrap gap-2" data-testid="details-actions">
+              {open ? (
+                <>
+                  <a className="btn" href={`#/test/${open.id}`} data-testid="details-resume">Resume unfinished test</a>
+                  <button className="btn" data-testid="discard-block" onClick={() => window.confirm(`Discard the unfinished test of “${e.name}”? Its answers are deleted.`) && void deleteAttempt(open.id)}>Discard unfinished test</button>
+                </>
+              ) : (
+                <a className="btn" href={`#/setup?exam=${e.id}`}>New test</a>
+              )}
+              {last && <a className="btn" href={`#/report/${last.id}`}>Latest report</a>}
               {miss > 0 && <a className="btn" href={`#/setup?exam=${e.id}&pick=missed`}>Retake missed ({miss})</a>}
+              <a className="btn" href={`#/exam/${e.id}`}>All tests</a>
               <a className="btn" href={`#/exam/${e.id}/key`}>{e.keyChecked ? 'Edit answer key' : 'Check answer key'}</a>
-              <button className="btn" onClick={() => { setMove(e); setMoveTo(catOf(e) === UNSORTED ? '' : catOf(e)); setDetails(null); }}>Move to a folder</button>
+              <button className="btn" onClick={() => { setMove(e); setMoveTo(catOf(e) === UNSORTED ? '' : catOf(e)); setDetails(null); }} data-testid="details-move">Move</button>
               <button className="btn" style={{ color: 'var(--bad)' }} onClick={() => { setDel(e); setDetails(null); }} data-testid="delete-exam">Delete</button>
             </div>
-          </Modal>
+          </PaperModal>
         );
       })()}
 
@@ -368,30 +433,28 @@ export function Home() {
       </div>
 
       {move && (
-        <Modal title={`Move “${move.name}” to a folder`} onClose={() => setMove(null)}>
-          <div className="mb-3 flex items-center gap-2">
+        <PaperModal title={`Move “${move.name}” to a folder`} onClose={() => setMove(null)} width={480} footer={<><button className="btn" onClick={() => setMove(null)}>Cancel</button><button className="btn-primary" onClick={async () => { await saveExam({ ...move, subject: moveTo.trim() }); setMove(null); }}>Move</button></>}>
+          <div className="flex items-center gap-2">
             Folder
             <FolderPicker value={moveTo} onChange={setMoveTo} testId="move-folder" />
           </div>
-          <div className="flex justify-end gap-2">
-            <button className="btn" onClick={() => setMove(null)}>Cancel</button>
-            <button className="btn-primary" onClick={async () => { await saveExam({ ...move, subject: moveTo.trim() }); setMove(null); }}>Move</button>
-          </div>
-        </Modal>
+        </PaperModal>
       )}
       {del && (
-        <Modal title={`Delete “${del.name}”?`} onClose={() => setDel(null)}>
-          <p className="mb-3">The stored PDF and answer key will be removed from this device.</p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <button className="btn" onClick={() => setDel(null)}>Cancel</button>
-            <button className="btn" data-testid="delete-keep-history" onClick={async () => { await deleteExam(del.id, false); setDel(null); }}>
-              Delete exam, keep my attempt history
-            </button>
-            <button className="btn-danger" data-testid="delete-all" onClick={async () => { await deleteExam(del.id, true); setDel(null); }}>
-              Delete exam and its history
-            </button>
-          </div>
-        </Modal>
+        <PaperModal
+          title={`Delete “${del.name}”?`}
+          onClose={() => setDel(null)}
+          width={520}
+          footer={
+            <>
+              <button className="btn" onClick={() => setDel(null)}>Cancel</button>
+              <button className="btn" data-testid="delete-keep-history" onClick={async () => { await deleteExam(del.id, false); setDel(null); }}>Delete exam, keep history</button>
+              <button className="btn" style={{ background: 'var(--bad)', borderColor: 'var(--bad)', color: '#fff' }} data-testid="delete-all" onClick={async () => { await deleteExam(del.id, true); setDel(null); }}>Delete exam and history</button>
+            </>
+          }
+        >
+          <p>The stored PDF and answer key will be removed from this device.</p>
+        </PaperModal>
       )}
     </div>
   );

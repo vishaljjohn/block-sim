@@ -47,6 +47,27 @@ const clock = (ms: number) => {
 };
 const when = (t: number) => `${new Date(t).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })} at ${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
+function ContentCell({ folders, exams }: { folders: string[]; exams: string[] }) {
+  const [open, setOpen] = useState<'f' | 'e' | null>(null);
+  const Row = ({ k, label, list, last }: { k: 'f' | 'e'; label: string; list: string[]; last?: boolean }) => (
+    <div className={'flex items-start gap-2 ' + (last ? 'pt-1' : 'border-b pb-1')} style={{ borderColor: 'var(--line)' }}>
+      <span className="mono pt-0.5 text-[10px] font-bold" style={{ color: 'var(--ink-2)' }}>{label}</span>
+      <span className={'min-w-0 flex-1 font-semibold ' + (open === k ? 'whitespace-normal' : 'truncate')}>{list.join(', ')}</span>
+      {list.join(', ').length > 26 && (
+        <button className="mono shrink-0 text-[13px] font-bold" aria-label={open === k ? 'Show less' : label === 'FLD' ? 'View all folders' : 'View all exams'} onClick={() => setOpen(open === k ? null : k)}>
+          {open === k ? '−' : '+'}
+        </button>
+      )}
+    </div>
+  );
+  return (
+    <>
+      <Row k="f" label="FLD" list={folders} />
+      <Row k="e" label="EXM" list={exams} last />
+    </>
+  );
+}
+
 export function History() {
   const attempts = useLive(() => db.attempts.toArray(), []);
   const exams = useLive(() => db.exams.toArray(), []);
@@ -115,9 +136,8 @@ export function History() {
                     <div className="text-[15px]" style={{ color: 'var(--ink)' }}>{a.examId ? (names.get(a.examId)?.name ?? 'Deleted exam') : 'Mixed questions'}</div>
                     <span className="badge-mode mt-1">{modeOf(a)} mode</span>
                   </td>
-                  <td className="max-w-[240px] px-4 py-4 text-[12.5px]">
-                    <div className="flex gap-2 truncate border-b pb-1" style={{ borderColor: 'var(--line)' }}><span className="mono text-[10px] font-bold" style={{ color: 'var(--ink-2)' }}>FLD</span><span className="truncate font-semibold">{[...new Set(ex.map((e) => e?.subject?.trim() || 'No folder'))].join(', ')}</span></div>
-                    <div className="flex gap-2 truncate pt-1"><span className="mono text-[10px] font-bold" style={{ color: 'var(--ink-2)' }}>EXM</span><span className="truncate font-semibold">{ex.map((e) => e?.name ?? 'Deleted exam').join(', ')}</span></div>
+                  <td className="max-w-[260px] px-4 py-4 text-[12.5px]">
+                    <ContentCell folders={[...new Set(ex.map((e) => e?.subject?.trim() || 'No folder'))]} exams={ex.map((e) => e?.name ?? 'Deleted exam')} />
                   </td>
                   <td className="mono whitespace-nowrap px-4 py-4">
                     <div className="text-[16px]">Took: {clock(took(a))}</div>

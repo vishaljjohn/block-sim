@@ -14,7 +14,7 @@ type DateFilter = 'any' | 'missed7' | 'missed30' | 'missed90' | 'stale14';
 type SortKey = 'missed' | 'due' | 'exam' | 'times';
 
 /** Text of the part of the page(s) a question occupies (for search). */
-function questionText(exam: Exam, qid: string, pages: Map<string, PageText>): string {
+export function questionText(exam: Exam, qid: string, pages: Map<string, PageText>): string {
   const q = exam.questions.find((x) => x.id === qid);
   if (!q) return '';
   return q.segments

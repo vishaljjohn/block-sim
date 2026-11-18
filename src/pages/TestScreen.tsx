@@ -44,6 +44,7 @@ import { go, useElementWidth, useLive } from '../ui/hooks';
 import { QuestionView } from '../ui/QuestionView';
 import { AnswerBox } from '../ui/AnswerBox';
 import { Calculator, LabValues, Modal, NotesPanel } from '../ui/panels';
+import { questionText } from './Missed';
 import { Check, Cross, IconCalc, IconCheckCircle, IconEnd, IconExit, IconFlag, IconGear, IconGrid, IconLab, IconNext, IconNotes, IconPause, IconPrev } from '../ui/icons';
 
 type Filter = 'all' | 'incorrect' | 'marked' | 'changed' | 'guesses' | 'slowest';
@@ -92,6 +93,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const [menu, setMenu] = useState(false);
   const [modal, setModal] = useState<null | 'grid' | 'end' | 'confirm' | 'help' | 'timer'>(null);
   const [navFilter, setNavFilter] = useState<null | 'marked' | 'incomplete'>(null);
+  const [qCopied, setQCopied] = useState('');
   const [filter, setFilter] = useState<Filter>((FILTERS.find((f) => f.id === startFilter)?.id ?? 'all') as Filter);
   const [showElapsed, setShowElapsed] = useState(false);
   const [sidebar, setSidebar] = useState(true);
@@ -556,6 +558,19 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const correct = cur ? isCorrect(cur) : false;
   const changeKind = cur ? classifyChange(cur) : null;
 
+  const copyQuestion = async () => {
+    if (!exam || !cur) return;
+    const pages = new Map((texts ?? []).map((t) => [`${exam.id}:${t.page}`, t]));
+    const body = questionText(exam, cur.qid, pages).trim() || `${exam.name}, question ${cur.number}`;
+    const extra = review || cur.locked ? `\n\nCorrect answer: ${cur.key ?? '?'}` : '';
+    try {
+      await navigator.clipboard.writeText(body + extra);
+      setQCopied('Copied');
+    } catch {
+      setQCopied('Could not copy');
+    }
+    setTimeout(() => setQCopied(''), 1500);
+  };
   const copyReview = async () => {
     if (!cur) return;
     const text = [`${exam?.name ?? 'Exam'}, question ${cur.number}`, `My answer: ${cur.answer ?? '(blank)'}   Correct answer: ${cur.key ?? '?'}`, cur.reviewNote ? `\nWhat I learned:\n${cur.reviewNote}` : '', question?.explanation ? `\nExplanation:\n${question.explanation}` : ''].filter(Boolean).join('\n');
@@ -764,6 +779,11 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                         <button className="ml-1 font-bold" onClick={() => setNavFilter(null)} aria-label="Stop filtering">×</button>
                       </span>
                     )}
+                    {exam && cur && (
+                      <button className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-0.5 font-bold text-gray-700 shadow-sm" onClick={() => void copyQuestion()} data-testid="copy-question">
+                        ⧉ {qCopied || 'Copy question'}
+                      </button>
+                    )}
                     {testing && !itemLocked && (cur?.highlights.length ?? 0) > 0 && (
                       <button className="font-bold text-gray-700" onClick={() => editItem((it) => setHighlights(it, []))} data-testid="clear-highlights">
                         🗑 Clear highlights
@@ -953,6 +973,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                     Block Time Elapsed <span data-testid="timer-value">{T.fmtClock(elapsedMs)}</span>
                   </>
                 )}
+                <span className="block text-[10px] opacity-80" data-testid="answer-time">Answer Time {T.fmtClock(a.items.slice(b.start, b.end).reduce((n, x) => n + x.timeMs, 0))}</span>
                 </span>
                 <span className="flex items-center gap-1 rounded-sm bg-white/20 px-1.5 py-0.5 text-[11px]" data-testid="mode-chip">
                   {a.mode === 'tutor' ? 'Tutor' : 'Test'} · {remMs != null ? 'Timed' : 'Untimed'}

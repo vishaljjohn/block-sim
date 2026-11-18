@@ -5,6 +5,7 @@ import type { Attempt, Exam, PageText, ReviewRecord } from '../types';
 import { applyTombstones, betterAttempt, mergeById, mergeReviews, mergeTombstones, type Tombstone } from './merge';
 import { getTombstones } from './store';
 import { forgetPdf } from './pdf';
+import type { LibState, VideoState } from './localLibrary';
 
 /**
  * One file layout is used for both backups (zipped) and the data folder (plain files):
@@ -39,6 +40,9 @@ export async function collectFiles(opts: { examId?: string; withPdfs?: boolean }
   if (!opts.examId) {
     const colls = await getMeta<unknown[]>('noteCollections', []);
     if (colls.length) json.set('collections.json', colls);
+    const library = await getMeta<unknown>('libraryState', null);
+    const videos = await getMeta<unknown>('videoState', null);
+    if (library || videos) json.set('reading.json', { library, videos });
   }
   for (const e of exams) {
     json.set(paths.exam(e.id), e);
@@ -173,6 +177,20 @@ export async function mergeIntoDb(files: FileSet, opts: { resurrect?: boolean } 
       byId.set(c.id, m ? { ...m, keys: [...new Set([...m.keys, ...(c.keys ?? [])])] } : c);
     }
     await setMeta('noteCollections', [...byId.values()]);
+  }
+  // library and video progress: union of finished/bookmarked/watched, newest position wins
+  const reading = files.json.get('reading.json') as { library?: LibState | null; videos?: VideoState | null } | undefined;
+  if (reading?.library) {
+    const mine = await getMeta<LibState>('libraryState', { done: [], bookmarks: [], opened: [] });
+    const opened = new Map([...(reading.library.opened ?? []), ...mine.opened].map((o) => [o.path, o]));
+    for (const o of [...(reading.library.opened ?? []), ...mine.opened]) if (o.t > (opened.get(o.path)?.t ?? 0)) opened.set(o.path, o);
+    await setMeta('libraryState', { done: [...new Set([...mine.done, ...(reading.library.done ?? [])])], bookmarks: [...new Set([...mine.bookmarks, ...(reading.library.bookmarks ?? [])])], opened: [...opened.values()].sort((a, b) => b.t - a.t).slice(0, 50) });
+  }
+  if (reading?.videos) {
+    const mine = await getMeta<VideoState>('videoState', { pos: {}, watched: [] });
+    const pos = { ...mine.pos };
+    for (const [k, v] of Object.entries(reading.videos.pos ?? {})) if (!pos[k] || v.t > pos[k].t) pos[k] = v;
+    await setMeta('videoState', { pos, watched: [...new Set([...mine.watched, ...(reading.videos.watched ?? [])])] });
   }
   const havePages = new Set((await db.pages.toCollection().primaryKeys()) as string[]);
   const newPages = inPages.filter((p) => keepExam.has(p.examId) && !havePages.has(p.id));

@@ -28,6 +28,8 @@ const GROUPS: { label?: string; items: Item[] }[] = [
     label: 'Learn',
     items: [
       { href: '#/exams', label: 'Exams', icon: I.book, match: (p) => p.startsWith('/exams') || p.startsWith('/exam/') || p.startsWith('/setup'), testId: 'nav-exams' },
+      { href: '#/library', label: 'Library', icon: 'M4 4h6v16H4zM10 4h4v16h-4zM15 5l4-1 3 15-4 1z', match: (p) => p.startsWith('/library'), testId: 'nav-library' },
+      { href: '#/videos', label: 'Video Library', icon: 'M3 6h12v12H3zM15 10l6-3v10l-6-3', match: (p) => p.startsWith('/videos'), testId: 'nav-videos' },
       { href: '#/queue', label: 'Review Queue', icon: I.stack, match: (p) => p.startsWith('/queue') || p.startsWith('/redo'), testId: 'nav-queue' },
       { href: '#/import', label: 'Import', icon: I.upload, match: (p) => p.startsWith('/import'), testId: 'nav-import' },
     ],

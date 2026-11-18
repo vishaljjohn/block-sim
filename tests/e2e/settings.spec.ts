@@ -162,11 +162,13 @@ test('item box hides the question list; full screen button; type minutes; tutor 
 test('folder picker: pick a listed folder or type a new one', async ({ page }) => {
   await freshStart(page);
   await page.goto('./#/exams');
-  await page.getByTestId('exam-row-demo-exam').getByRole('button', { name: 'Move' }).click();
+  await page.getByTestId('exam-row-demo-exam').getByTestId('exam-details').click();
+  await page.getByTestId('details-move').click();
   await page.getByTestId('move-folder').selectOption('Surgery');
   await page.getByRole('dialog').getByRole('button', { name: 'Move', exact: true }).click();
   await expect(page.getByTestId('folder-Surgery')).toBeVisible();
-  await page.getByTestId('exam-row-demo-exam').getByRole('button', { name: 'Move' }).click();
+  await page.getByTestId('exam-row-demo-exam').getByTestId('exam-details').click();
+  await page.getByTestId('details-move').click();
   await page.getByTestId('move-folder').selectOption({ label: 'New folder…' });
   await page.getByTestId('move-folder-name').fill('My Shelf');
   await page.getByRole('dialog').getByRole('button', { name: 'Move', exact: true }).click();
