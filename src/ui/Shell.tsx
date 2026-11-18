@@ -3,7 +3,9 @@ import { APP_VERSION, BUG_REPORT_URL, IS_BETA } from '../config';
 import { db } from '../db';
 import { setActiveExam, useActiveExamId } from '../lib/activeExam';
 import { useLive } from './hooks';
-import { LabValues } from './panels';
+import { PaperLabs } from './PaperLabs';
+import { useDisplay } from '../lib/display';
+import { patchDisplay } from '../lib/store';
 
 type Item = { href: string; label: string; icon: string; match: (p: string) => boolean; testId?: string };
 const I = {
@@ -33,7 +35,7 @@ const GROUPS: { label?: string; items: Item[] }[] = [
   {
     label: 'Review',
     items: [
-      { href: '#/history', label: 'Test History', icon: I.history, match: (p) => p.startsWith('/history') || p.startsWith('/report'), testId: 'nav-history' },
+      { href: '#/history', label: 'Test History', icon: I.history, match: (p) => p.startsWith('/history') || p.startsWith('/report/'), testId: 'nav-history' },
       { href: '#/notes', label: 'My Notes', icon: I.note, match: (p) => p.startsWith('/notes'), testId: 'nav-notes' },
       { href: '#/missed', label: 'Missed Questions', icon: I.miss, match: (p) => p.startsWith('/missed'), testId: 'nav-missed' },
       { href: '#/reports', label: 'Reports', icon: I.chart, match: (p) => p.startsWith('/reports'), testId: 'nav-reports' },
@@ -77,8 +79,8 @@ function NavLink({ it, path, onGo }: { it: Item; path: string; onGo?: () => void
       onClick={onGo}
       data-testid={it.testId}
       aria-current={on ? 'page' : undefined}
-      className="relative flex items-center gap-3 rounded-sm px-3 py-2 text-[14px] font-medium transition-colors"
-      style={on ? { background: 'var(--surface-2)', color: 'var(--ink)', boxShadow: 'inset 3px 0 0 var(--brand)' } : { color: 'var(--ink-2)' }}
+      className="flex items-center gap-3 border-l-4 px-4 py-2.5 text-[14px] font-semibold transition-colors hover:bg-[var(--surface-2)]"
+      style={on ? { background: 'var(--surface-2)', color: 'var(--ink)', borderColor: 'var(--brand)' } : { color: 'var(--ink-2)', borderColor: 'transparent' }}
     >
       <Icon d={it.icon} />
       {it.label}
@@ -95,10 +97,10 @@ function ActiveExam() {
   if (!exams.length) return null;
   return (
     <div className="relative">
-      <button className="flex items-center gap-3 border px-3 py-1.5 text-right" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }} onClick={() => setOpen((o) => !o)} data-testid="active-exam" aria-expanded={open}>
+      <button className="flex items-center gap-3 px-4 py-2 text-right" style={{ background: 'var(--surface-2)' }} onClick={() => setOpen((o) => !o)} data-testid="active-exam" aria-expanded={open}>
         <span>
-          <span className="eyebrow block">Active exam</span>
-          <span className="block max-w-[240px] truncate text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>
+          <span className="eyebrow block leading-4">Active exam</span>
+          <span className="block max-w-[260px] truncate text-[16px] font-semibold leading-6" style={{ color: 'var(--ink)' }}>
             {cur?.name ?? '—'}
           </span>
         </span>
@@ -120,7 +122,7 @@ function ActiveExam() {
                   setOpen(false);
                 }}
               >
-                <span className="eyebrow mr-2">{e.subject || 'No folder'}</span>
+                <span className="eyebrow-mono mr-2">{e.subject || 'No folder'}</span>
                 {e.name}
               </button>
             ))}
@@ -133,6 +135,49 @@ function ActiveExam() {
   );
 }
 
+function UserMenu() {
+  const d = useDisplay();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button className="flex items-center gap-2" onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="user-menu">
+        <span className="text-right leading-tight">
+          <span className="block text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>You</span>
+          <span className="mono block border px-1 text-[9px] font-bold uppercase" style={{ borderColor: 'var(--line)', color: 'var(--ink-2)', background: 'var(--surface-2)' }}>This device</span>
+        </span>
+        <span className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: 'var(--line)', color: 'var(--ink-2)' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="9" r="4" /><path d="M4 21c1-4.5 4.5-6.5 8-6.5s7 2 8 6.5z" /></svg>
+        </span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-2 w-[180px] border-2 bg-[var(--surface)] p-2 text-[14px] shadow-lg" style={{ borderColor: 'var(--line)' }} role="menu">
+            <div className="mb-2 grid grid-cols-2 border-2" style={{ borderColor: 'var(--line)' }}>
+              {(['light', 'dark'] as const).map((t) => (
+                <button key={t} className="py-1.5" aria-label={t === 'light' ? 'Light mode' : 'Dark mode'} style={d.theme === t ? { background: 'var(--navy)', color: 'var(--bg)' } : { color: 'var(--ink-2)' }} onClick={() => void patchDisplay({ theme: t })} data-testid={`app-theme-${t}`}>
+                  {t === 'light' ? '☀' : '☾'}
+                </button>
+              ))}
+            </div>
+            <a className="block px-2 py-1.5 font-semibold hover:bg-[var(--surface-2)]" href="#/settings" onClick={() => setOpen(false)}>My Settings</a>
+            <a className="block px-2 py-1.5 font-semibold hover:bg-[var(--surface-2)]" href="#/faq" onClick={() => setOpen(false)}>Help</a>
+            <a className="block px-2 py-1.5 font-semibold hover:bg-[var(--surface-2)]" style={{ color: 'var(--brand)' }} href={BUG_REPORT_URL} target="_blank" rel="noreferrer noopener">Report a bug</a>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const MOBILE: Item[] = [
+  { href: '#/', label: 'Dashboard', icon: I.home, match: (p) => p === '/' || p === '' },
+  { href: '#/exams', label: 'Learn', icon: I.book, match: (p) => p.startsWith('/exams') || p.startsWith('/exam/') || p.startsWith('/queue') },
+  { href: '#/setup?exam=active', label: 'New Test', icon: 'M12 5v14M5 12h14', match: (p) => p.startsWith('/setup') },
+  { href: '#/history', label: 'Review', icon: I.history, match: (p) => p.startsWith('/history') || p.startsWith('/report/') || p.startsWith('/notes') || p.startsWith('/missed') },
+  { href: '#/reports', label: 'Reports', icon: I.chart, match: (p) => p.startsWith('/reports') },
+];
+
 export function Shell({ path, children, wide }: { path: string; children: ReactNode; wide?: boolean }) {
   const [labs, setLabs] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -140,79 +185,93 @@ export function Shell({ path, children, wide }: { path: string; children: ReactN
     <div className="app flex min-h-full">
       {/* sidebar */}
       <aside
-        className={'fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col border-r transition-transform lg:translate-x-0 ' + (menu ? 'translate-x-0' : '-translate-x-full')}
+        className={'fixed inset-y-0 left-0 z-40 flex w-[256px] flex-col border-r-2 transition-transform lg:translate-x-0 ' + (menu ? 'translate-x-0' : '-translate-x-full')}
         style={{ borderColor: 'var(--line)', background: 'var(--bg)' }}
         aria-label="Main"
       >
-        <a href="#/" className="flex h-[72px] items-center gap-2.5 border-b px-6" style={{ borderColor: 'var(--line)' }} aria-label="Test Simulator: Dashboard">
-          <Logo />
-          <span className="serif text-[19px] font-bold" style={{ color: 'var(--ink)' }}>
+        <a href="#/" className="flex h-[80px] shrink-0 items-center justify-center gap-2.5 border-b-2 px-4" style={{ borderColor: 'var(--line)' }} aria-label="Test Simulator: Dashboard">
+          <span className="serif flex h-8 w-8 items-center justify-center text-[20px] font-bold" style={{ background: 'var(--navy)', color: 'var(--bg)' }}>T</span>
+          <span className="serif text-[22px] font-bold tracking-[-0.6px]" style={{ color: 'var(--ink)' }}>
             Test Simulator
           </span>
         </a>
-        <nav className="flex-1 overflow-y-auto px-4 py-4">
+        <nav className="flex-1 overflow-y-auto px-4 py-6">
           {GROUPS.map((g, i) => (
-            <div key={i} className="mb-2">
-              {g.label && <div className="rule-label my-3">{g.label}</div>}
-              <div className="space-y-0.5">
+            <div key={i} className="mb-1">
+              {g.label && <div className="rule-label py-3">{g.label}</div>}
+              <div className="space-y-1">
                 {g.items.map((it) => (
                   <NavLink key={it.href} it={it} path={path} onGo={() => setMenu(false)} />
                 ))}
               </div>
             </div>
           ))}
-        </nav>
-        <div className="space-y-0.5 border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
-          {BOTTOM.map((it) => (
-            <NavLink key={it.href} it={it} path={path} onGo={() => setMenu(false)} />
-          ))}
-          <div className="px-3 pt-2 text-[11px]" style={{ color: 'var(--ink-3)' }}>
-            v{APP_VERSION}
-            {IS_BETA ? ' beta' : ''} · on this device ·{' '}
-            <a className="link" href={BUG_REPORT_URL} target="_blank" rel="noreferrer noopener">
-              Report a bug
-            </a>
+          <div className="rule-label py-3">More</div>
+          <div className="space-y-1">
+            {BOTTOM.map((it) => (
+              <NavLink key={it.href} it={it} path={path} onGo={() => setMenu(false)} />
+            ))}
           </div>
+        </nav>
+        <div className="border-t-2 px-6 py-3 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-3)' }}>
+          v{APP_VERSION}
+          {IS_BETA ? ' beta' : ''} · saved on this device
         </div>
       </aside>
       {menu && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setMenu(false)} />}
 
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-[240px]">
+      <div className="flex min-w-0 flex-1 flex-col pb-16 lg:pb-0 lg:pl-[256px]">
         {/* top bar */}
-        <header className="sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b px-4 sm:px-8" style={{ borderColor: 'var(--line)', background: 'color-mix(in srgb, var(--bg) 92%, transparent)', backdropFilter: 'blur(6px)' }}>
+        <header className="sticky top-0 z-30 flex h-[80px] items-center gap-3 border-b-2 px-4 sm:px-8" style={{ borderColor: 'var(--line)', background: 'color-mix(in srgb, var(--bg) 80%, transparent)', backdropFilter: 'blur(8px)' }}>
           <button className="btn lg:hidden" onClick={() => setMenu(true)} aria-label="Open the menu">
             ☰
           </button>
           {IS_BETA && (
-            <span className="pill" style={{ color: '#92400e', background: '#fef3c7', borderColor: '#f59e0b' }} data-testid="beta-badge">
+            <span className="pill" style={{ color: '#9a6304' }} data-testid="beta-badge">
               Beta
             </span>
           )}
-          <div className="ml-auto flex items-center gap-3">
-            <button className="flex items-center gap-2 rounded-full border px-4 py-1.5 text-[14px] font-medium" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }} onClick={() => setLabs((l) => !l)} data-testid="nav-labs">
+          <div className="ml-auto flex items-center gap-4">
+            <button className="hidden items-center gap-2 rounded-2xl border-2 px-3 py-2 text-[14px] sm:flex" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)', color: 'var(--ink-2)' }} onClick={() => setLabs((l) => !l)} data-testid="nav-labs">
               <Icon d={I.flask} size={16} /> Lab Values
             </button>
             <ActiveExam />
+            <UserMenu />
           </div>
         </header>
-        <main className={'mx-auto w-full flex-1 px-4 py-8 sm:px-8 ' + (wide ? 'max-w-[1500px]' : 'max-w-[1240px]')}>{children}</main>
+        <main className={'mx-auto w-full flex-1 px-4 py-8 sm:px-8 ' + (wide ? 'max-w-[1500px]' : 'max-w-[1280px]')}>{children}</main>
       </div>
-      {labs && <LabValues onClose={() => setLabs(false)} top={72} bottom={0} />}
+      {/* phone tab bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t-2 lg:hidden" style={{ borderColor: 'var(--line)', background: 'var(--bg)' }} aria-label="Sections">
+        {MOBILE.map((it) => {
+          const on = it.match(path);
+          return (
+            <a key={it.label} href={it.href} className="flex flex-col items-center justify-center gap-0.5 text-[11px] font-semibold" style={{ color: on ? 'var(--brand)' : 'var(--ink-2)' }}>
+              <Icon d={it.icon} size={20} />
+              {it.label}
+            </a>
+          );
+        })}
+      </nav>
+      {labs && <PaperLabs onClose={() => setLabs(false)} top={80} />}
     </div>
   );
 }
 
-export function H1({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
+export function H1({ children, sub, rule, right }: { children: ReactNode; sub?: ReactNode; rule?: boolean; right?: ReactNode }) {
   return (
-    <div className="mb-6">
-      <h1 className="text-[32px] font-bold leading-tight sm:text-[36px]" style={{ color: 'var(--ink)' }}>
-        {children}
-      </h1>
-      {sub && (
-        <p className="mt-1 text-[15px]" style={{ color: 'var(--ink-2)' }}>
-          {sub}
-        </p>
-      )}
+    <div className={'mb-6 flex flex-wrap items-start justify-between gap-3 ' + (rule ? 'border-b-2 pb-6' : '')} style={{ borderColor: 'var(--line)' }}>
+      <div className="min-w-0">
+        <h1 className="text-[30px] font-bold leading-[37px]" style={{ color: 'var(--ink)' }}>
+          {children}
+        </h1>
+        {sub && (
+          <p className="mt-0.5 text-[14px]" style={{ color: 'var(--ink-2)' }}>
+            {sub}
+          </p>
+        )}
+      </div>
+      {right && <div className="flex flex-wrap gap-2">{right}</div>}
     </div>
   );
 }

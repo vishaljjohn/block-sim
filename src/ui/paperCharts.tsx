@@ -23,7 +23,7 @@ export function TripleBar({ correct, incorrect, remaining, testId }: { correct: 
 }
 
 /** Smooth area chart of percentages over time. */
-export function AreaChart({ points, height = 220, color = 'var(--brand)', label }: { points: { x: string; y: number }[]; height?: number; color?: string; label?: string }) {
+export function AreaChart({ points, height = 220, color = 'var(--brand)', line, label, danger }: { points: { x: string; y: number }[]; height?: number; color?: string; line?: string; label?: string; danger?: number }) {
   const W = 640;
   const H = height;
   const P = { l: 40, r: 12, t: 12, b: 28 };
@@ -59,9 +59,15 @@ export function AreaChart({ points, height = 220, color = 'var(--brand)', label 
         </g>
       ))}
       <path d={area} fill={`url(#${gid})`} />
-      <path d={d} fill="none" stroke={color} strokeWidth="2.2" />
+      {danger != null && (
+        <g>
+          <line x1={P.l} x2={W - P.r} y1={Y(danger)} y2={Y(danger)} stroke="#dc3545" strokeDasharray="6 4" strokeWidth="1.4" />
+          <text x={W - P.r - 4} y={Y(danger) + 12} fontSize="10" textAnchor="end" fill="#dc3545" fontWeight="600">Danger Zone</text>
+        </g>
+      )}
+      <path d={d} fill="none" stroke={line ?? color} strokeWidth="2.2" />
       {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="2.6" fill={color}>
+        <circle key={i} cx={x} cy={y} r="2.6" fill={line ?? color}>
           <title>{`${points[i].x}: ${Math.round(points[i].y)}%`}</title>
         </circle>
       ))}
@@ -175,6 +181,72 @@ export function Sparkline({ values, width = 70, height = 26 }: { values: number[
   return (
     <svg width={width} height={height} aria-hidden="true">
       <polyline points={pts} fill="none" stroke="var(--brand)" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+const SERIES = ['#dc3545', '#1a2e3b', '#a0522d', '#28a745', '#6d28d9', '#0f766e', '#d97706', '#2f5d8a'];
+
+/** Several percentage lines over the same dates, with a legend. */
+export function MultiLine({ series, height = 260 }: { series: { name: string; points: { t: number; y: number }[] }[]; height?: number }) {
+  const W = 760;
+  const H = height;
+  const P = { l: 40, r: 14, t: 12, b: 46 };
+  const ts = [...new Set(series.flatMap((s) => s.points.map((p) => p.t)))].sort((a, b) => a - b);
+  if (ts.length < 2) return <div className="flex items-center justify-center text-sm" style={{ height: 160, color: 'var(--ink-3)', background: 'var(--surface-2)' }}>Finish two tests to see the trend.</div>;
+  const X = (t: number) => P.l + ((t - ts[0]) / Math.max(1, ts[ts.length - 1] - ts[0])) * (W - P.l - P.r);
+  const Y = (v: number) => P.t + (1 - v / 100) * (H - P.t - P.b);
+  const every = Math.ceil(ts.length / 10);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Score trend">
+      {[0, 20, 40, 60, 80, 100].map((v) => (
+        <g key={v}>
+          <line x1={P.l} x2={W - P.r} y1={Y(v)} y2={Y(v)} stroke="currentColor" strokeOpacity="0.12" strokeDasharray="3 3" />
+          <text x={P.l - 6} y={Y(v) + 3} fontSize="10" textAnchor="end" fill="currentColor" opacity="0.6">{v}%</text>
+        </g>
+      ))}
+      {ts.map((t, i) => (i % every === 0 || i === ts.length - 1 ? <text key={t} x={X(t)} y={H - 30} fontSize="10" textAnchor="middle" fill="currentColor" opacity="0.7">{new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</text> : null))}
+      {series.slice(0, SERIES.length).map((s, k) => {
+        const pts = s.points.map((p) => [X(p.t), Y(p.y)] as const);
+        return (
+          <g key={s.name}>
+            <polyline points={pts.map((p) => p.join(',')).join(' ')} fill="none" stroke={SERIES[k]} strokeWidth="1.8" />
+            {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3" fill="var(--surface)" stroke={SERIES[k]} strokeWidth="1.5" />)}
+            <g transform={`translate(${P.l + k * 150}, ${H - 10})`}>
+              <line x1="0" x2="14" y1="-3" y2="-3" stroke={SERIES[k]} strokeWidth="2" />
+              <text x="18" y="0" fontSize="10.5" fill={SERIES[k]}>{s.name.length > 20 ? s.name.slice(0, 19) + '…' : s.name}</text>
+            </g>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Vertical score bars (recent tests). */
+export function ScoreBars({ rows, height = 220 }: { rows: { name: string; pct: number }[]; height?: number }) {
+  const W = 760;
+  const H = height;
+  const P = { l: 40, r: 10, t: 10, b: 24 };
+  if (!rows.length) return <div className="text-sm" style={{ color: 'var(--ink-3)' }}>No finished tests in this period.</div>;
+  const Y = (v: number) => P.t + (1 - v / 100) * (H - P.t - P.b);
+  const bw = (W - P.l - P.r) / rows.length;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Recent test scores">
+      {[0, 20, 40, 60, 80, 100].map((v) => (
+        <g key={v}>
+          <line x1={P.l} x2={W - P.r} y1={Y(v)} y2={Y(v)} stroke="currentColor" strokeOpacity="0.12" strokeDasharray="3 3" />
+          <text x={P.l - 6} y={Y(v) + 3} fontSize="10" textAnchor="end" fill="currentColor" opacity="0.6">{v}%</text>
+        </g>
+      ))}
+      {rows.map((r, i) => (
+        <g key={i}>
+          <rect x={P.l + i * bw + bw * 0.2} y={Y(r.pct)} width={bw * 0.6} height={Y(0) - Y(r.pct)} fill={r.pct >= 70 ? '#28a745' : r.pct >= 60 ? '#1a2e3b' : '#a0522d'}>
+            <title>{`${r.name}: ${Math.round(r.pct)}%`}</title>
+          </rect>
+          <text x={P.l + i * bw + bw / 2} y={H - 8} fontSize="10" textAnchor="middle" fill="currentColor" opacity="0.7">{r.name.length > 24 ? r.name.slice(0, 23) + '…' : r.name}</text>
+        </g>
+      ))}
     </svg>
   );
 }

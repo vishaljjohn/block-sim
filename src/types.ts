@@ -120,6 +120,8 @@ export interface Display {
   bold: boolean;
   /** 'board' = board-style test screen (navy bars, striped status list); 'default' = cleaner modern look */
   layout: 'board' | 'default';
+  /** where the explanation goes: next to the question (default) or under it */
+  split?: 'side' | 'below';
   /** quick: dragging highlights at once; manual: drag selects, then pick a color to apply */
   highlightMode: 'quick' | 'manual';
   highlightColor: HighlightColor;

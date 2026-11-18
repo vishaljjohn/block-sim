@@ -244,7 +244,17 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   }, [a, review, filter, navFilter, b?.start, b?.end]);
 
   const blockItems = useMemo(() => (a && b ? (review ? a.items.map((_, i) => i) : Array.from({ length: b.end - b.start }, (_, i) => b.start + i)) : []), [a?.items.length, b?.start, b?.end, review]);
-  const sidebarItems = review ? order : blockItems;
+  const [sideFilter, setSideFilter] = useState<'all' | 'incorrect' | 'correct' | 'unanswered' | 'marked'>('all');
+  const sidebarItems = (review ? order : blockItems).filter((i) => {
+    const it = a?.items[i];
+    if (!it || sideFilter === 'all') return true;
+    if (sideFilter === 'marked') return it.marked;
+    if (sideFilter === 'unanswered') return !it.answer;
+    // right/wrong is only known once the answer is revealed
+    const known = review || it.locked;
+    if (!known || !it.answer) return false;
+    return sideFilter === 'correct' ? isCorrect(it) : !isCorrect(it);
+  });
 
   const goTo = useCallback(
     (i: number) => {
@@ -454,7 +464,9 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
       else if (letter === 'P') step(-1);
       else if (letter === 'M') mark();
       else if (letter === 'L') setPanel((p) => ({ ...p, labs: !p.labs }));
-      else if (letter === 'C') setPanel((p) => ({ ...p, calc: !p.calc }));
+      else if (letter === 'U' || (letter === 'C' && !e.altKey)) setPanel((p) => ({ ...p, calc: !p.calc }));
+      else if (letter === 'C') setPanel({ labs: false, calc: false, notes: false } as typeof panel);
+      else if (letter === 'F' && !review && a?.mode === 'tutor' && cur?.answer && !cur.locked) submitTutor();
       else return;
       e.preventDefault();
     };
@@ -466,9 +478,10 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
   const clickable = !!(exam && question && usesChoiceRegions(exam, question));
   const showExplain = reveal;
   const answerCol = clickable ? 0 : 168;
-  const explainW = showExplain ? Math.max(300, Math.min(520, Math.round(areaW * 0.36))) : 0;
+  const below = display.split === 'below';
+  const explainW = showExplain && !below ? Math.max(300, Math.min(520, Math.round(areaW * 0.36))) : 0;
   // the question always fits next to the bubbles and the explanation: a larger text size uses the free width, never more
-  const avail = Math.max(280, areaW - 44 - answerCol - explainW - (showExplain ? 24 : 0));
+  const avail = Math.max(280, areaW - 44 - answerCol - explainW - (showExplain && !below ? 24 : 0));
   const SIZE_CAP = { S: 820, M: 1000, L: 1180, XL: 1600 } as const;
   const qWidth = Math.round(Math.min(avail, SIZE_CAP[display.size]));
 
@@ -575,6 +588,13 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
         {sidebar && (
           <nav className="status-font flex w-[104px] shrink-0 flex-col border-r border-gray-400 bg-white" aria-label="Question status">
             <div className="px-1 py-1 text-center text-[13px] font-bold leading-tight">Question Status</div>
+            <select className="mx-1 mb-1 border border-gray-400 bg-white px-0.5 py-0.5 text-[11px]" value={sideFilter} onChange={(e) => setSideFilter(e.target.value as typeof sideFilter)} aria-label="Filter questions by result" data-testid="status-filter">
+              <option value="all">All questions</option>
+              <option value="incorrect">Incorrect</option>
+              <option value="correct">Correct</option>
+              <option value="unanswered">Unanswered</option>
+              <option value="marked">Marked</option>
+            </select>
             <div className="min-h-0 flex-1 overflow-y-auto" data-testid="sidebar">
               {sidebarItems.map((i, row) => {
                 const it = a.items[i];
@@ -649,6 +669,9 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                   </svg>
                 </ToolButton>
               )}
+              <ToolButton label="Shortcuts" onClick={() => setModal('help')} testId="btn-shortcuts" active={modal === 'help'}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></svg>
+              </ToolButton>
               <ToolButton label="Lab Values" onClick={() => setPanel((p) => ({ ...p, labs: !p.labs }))} testId="btn-labs" active={panel.labs}>
                 <IconLab />
               </ToolButton>
@@ -755,7 +778,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                     This question's exam is no longer in the library, so the page cannot be shown. Your answer ({cur.answer ?? 'blank'}) and the correct answer ({cur.key ?? 'unknown'}) are still saved.
                   </div>
                 )}
-                <div className="flex items-start gap-6">
+                <div className={below ? 'flex flex-wrap items-start gap-6' : 'flex items-start gap-6'}>
                   <div className="shrink-0">
                     {exam && question && doc && doc.examId === exam.id && cur && (
                       <QuestionView
@@ -854,7 +877,7 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
                   )}
 
                   {showExplain && cur && (
-                    <aside className="shrink-0 border-l border-gray-300 pl-5 text-[14px] leading-relaxed" style={{ width: explainW, userSelect: 'text', WebkitUserSelect: 'text' }} data-testid="explanation-panel">
+                    <aside className={below ? 'w-full border-t border-gray-300 pt-4 text-[14px] leading-relaxed' : 'shrink-0 border-l border-gray-300 pl-5 text-[14px] leading-relaxed'} style={{ width: below ? qWidth + answerCol : explainW, userSelect: 'text', WebkitUserSelect: 'text' }} data-testid="explanation-panel" data-split={below ? 'below' : 'side'}>
                       <div className="mb-2 inline-block border border-b-0 border-gray-300 px-3 py-1 text-[16px]">Explanation</div>
                       <div className="mb-3 text-[14px]">Correct Answer: {cur.key ? `${cur.key}.` : '(none in the answer key)'}</div>
                       {question?.explanation ? (
@@ -1128,30 +1151,36 @@ export function TestScreen({ attemptId, review, startIndex, startFilter }: { att
         </Modal>
       )}
       {modal === 'help' && (
-        <Modal title="Keyboard shortcuts" onClose={() => setModal(null)}>
-          <table className="w-full text-sm">
-            <tbody>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]" onClick={() => setModal(null)}>
+          <div className="w-full max-w-[448px] overflow-hidden rounded-md border-2 border-[#3d5a9e] bg-white shadow-2xl" role="dialog" aria-label="Keyboard Shortcuts" onClick={(e) => e.stopPropagation()} data-testid="shortcuts">
+            <div className="flex items-center justify-between bg-[#3d5a9e] px-5 py-3 text-white">
+              <span className="flex items-center gap-2 text-[15px] font-semibold">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></svg>
+                Keyboard Shortcuts
+              </span>
+              <button onClick={() => setModal(null)} aria-label="Close" className="text-xl leading-none">×</button>
+            </div>
+            <div className="space-y-3.5 px-8 py-6">
               {[
-                ['A – Z', 'Select that answer choice'],
-                ['→ or N', 'Next question'],
-                ['← or P', 'Previous question'],
-                ['M', 'Mark / unmark the question'],
-                ['L', 'Lab values'],
-                ['C', 'Calculator'],
-                ['Esc', 'Close panels and menus'],
-                ['Right-click (long-press on iPad)', 'Strike out a choice'],
-                ['Drag across text', 'Highlight; click a highlight to remove it'],
-                ['Click a picture (or Zoom)', 'Pop the image out; − / + to zoom'],
-              ].map(([k, v]) => (
-                <tr key={k}>
-                  <td className="td whitespace-nowrap font-bold">{k}</td>
-                  <td className="td">{v}</td>
-                </tr>
+                ['Answer choice selector', 'a,b,c,d'],
+                ['Mark question', 'Alt + m'],
+                ['Previous question', 'Alt + p'],
+                ['Next question', 'Alt + n'],
+                ['Feedback (tutor submit)', 'Alt + f'],
+                ['Close window', 'Alt + c'],
+                ['Calculator', 'Alt + u'],
+                ['Full Screen', 'F11'],
+                ['Lab Values', 'Alt + l'],
+                ['Strike out a choice', 'Right-click'],
+              ].map(([v, k]) => (
+                <div key={v} className="flex items-center justify-between gap-4 text-[15px] text-gray-800">
+                  <span>{v}</span>
+                  <kbd className="min-w-[84px] rounded bg-[#2d2d2d] px-3 py-1.5 text-center font-mono text-[12px] text-white shadow-[0_2px_0_#000]">{k}</kbd>
+                </div>
               ))}
-            </tbody>
-          </table>
-          <p className="mt-2 text-xs text-gray-700">Letters pick answer choices first: on a question with choices A–E, pressing C picks choice C. To use a shortcut whose letter is also a choice, hold Alt (Option on a Mac): Alt+C opens the Calculator. You can always click the buttons instead.</p>
-        </Modal>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

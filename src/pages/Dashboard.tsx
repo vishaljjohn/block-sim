@@ -10,8 +10,8 @@ import { AreaChart, HBars, Radar, TripleBar } from '../ui/paperCharts';
 function Stat({ label, value, sub, color, testId }: { label: string; value: string; sub?: React.ReactNode; color?: string; testId?: string }) {
   return (
     <div data-testid={testId}>
-      <div className="eyebrow mb-1">{label}</div>
-      <div className="mono text-[34px] font-bold leading-none" style={{ color: color ?? 'var(--ink)' }}>
+      <div className="eyebrow mb-1.5">{label}</div>
+      <div className="mono text-[36px] font-black leading-none" style={{ color: color ?? 'var(--ink)' }}>
         {value}
       </div>
       {sub && <div className="mt-1.5 text-[12.5px]" style={{ color: 'var(--ink-2)' }}>{sub}</div>}
@@ -71,7 +71,7 @@ export function Dashboard() {
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-6">
           {/* the exam on your desk */}
-          <section className="card accent-top p-7" data-testid="dash-exam">
+          <section className="card accent-top p-8" data-testid="dash-exam">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="text-[24px] font-bold leading-tight">{exam.name}</h2>
@@ -82,8 +82,8 @@ export function Dashboard() {
                 </p>
               </div>
               <div className="text-right">
-                <div className="eyebrow">Time studied</div>
-                <div className="mono text-[22px] font-bold">{fmtHours(timeStudied(attempts, exam.id))}</div>
+                <div className="eyebrow-mono">Time studied</div>
+                <div className="mono text-[18px] font-bold">{fmtHours(timeStudied(attempts, exam.id))}</div>
               </div>
             </div>
             <div className="my-6">
@@ -102,15 +102,15 @@ export function Dashboard() {
           </section>
 
           {/* trend + priorities */}
-          <section className="card p-7">
+          <section className="card p-8">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="serif text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: 'var(--ink-2)' }}>Score over time</h3>
-              <a className="link text-sm" href="#/reports">Full reports ↗</a>
+              <h3 className="serif text-[12px] font-bold uppercase tracking-[0.6px]" style={{ color: 'var(--ink-2)' }}>Score over time</h3>
+              <a className="link text-sm" href="#/reports">Full Reports ↗</a>
             </div>
             <div className="border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
               <AreaChart points={series} height={200} />
             </div>
-            <h3 className="serif mb-3 mt-7 text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: 'var(--ink-2)' }}>Subject priority matrix</h3>
+            <h3 className="serif mb-3 mt-7 text-[12px] font-bold uppercase tracking-[0.6px]" style={{ color: 'var(--ink-2)' }}>Subject priority matrix</h3>
             <div className="grid gap-3 md:grid-cols-2" data-testid="dash-priority">
               <div className="border p-4" style={{ borderColor: '#f3c4c4', background: 'color-mix(in srgb, #fee2e2 50%, var(--surface))' }}>
                 <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -131,12 +131,12 @@ export function Dashboard() {
         </div>
 
         <div className="space-y-6">
-          <section className="card p-6" data-testid="dash-radar">
-            <h3 className="text-[20px] font-bold">Competency radar</h3>
-            <div className="eyebrow mt-1">Accuracy by {radar === 'folders' ? 'folder' : 'exam'}</div>
-            <div className="seg mt-3 flex w-full">
-              <button className={'flex-1 ' + (radar === 'folders' ? 'on' : '')} onClick={() => setRadar('folders')}>Folders</button>
-              <button className={'flex-1 ' + (radar === 'exams' ? 'on' : '')} onClick={() => setRadar('exams')}>Exams</button>
+          <section className="card p-8" data-testid="dash-radar">
+            <h3 className="text-[20px] font-bold">Competency Radar</h3>
+            <div className="eyebrow-mono mt-1">Accuracy by {radar === 'folders' ? 'folder' : 'exam'}</div>
+            <div className="tabs mt-4">
+              <button className={radar === 'folders' ? 'on' : ''} onClick={() => setRadar('folders')}>Folders</button>
+              <button className={radar === 'exams' ? 'on' : ''} onClick={() => setRadar('exams')}>Exams</button>
             </div>
             <div className="mt-4">
               {radarItems.length >= 3 ? <Radar items={radarItems.slice(0, 10)} /> : <HBars rows={radarItems.map((r) => ({ name: r.name, value: r.value }))} />}
@@ -148,8 +148,8 @@ export function Dashboard() {
             </div>
           </section>
 
-          <section className="card p-6" data-testid="dash-queue">
-            <h3 className="text-[18px] font-bold">Review queue</h3>
+          <section className="card p-8" data-testid="dash-queue">
+            <h3 className="text-[18px] font-bold">Review Queue</h3>
             <div className="my-4 text-center" data-testid={dueList.length ? 'due-card' : undefined}>
               <div className="mono text-[44px] font-bold leading-none" data-testid="due-count">{dueList.length}</div>
               <div className="mt-1 text-[13px]" style={{ color: 'var(--ink-2)' }}>missed question{dueList.length === 1 ? '' : 's'} due today</div>
@@ -163,8 +163,8 @@ export function Dashboard() {
             )}
           </section>
 
-          <section className="card p-6">
-            <h3 className="mb-3 text-[18px] font-bold">Your exams</h3>
+          <section className="card p-8">
+            <h3 className="mb-3 text-[18px] font-bold">Your Exams</h3>
             <div className="space-y-1.5 text-[13.5px]">
               {(real.length ? real : exams).slice(0, 6).map((e) => (
                 <button key={e.id} className="flex w-full items-center justify-between gap-2 text-left hover:underline" onClick={() => setActiveExam(e.id)} style={e.id === exam.id ? { color: 'var(--brand)', fontWeight: 600 } : undefined}>

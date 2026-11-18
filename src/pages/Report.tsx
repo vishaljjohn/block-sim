@@ -1,45 +1,112 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db } from '../db';
+import type { Attempt, Exam } from '../types';
 import { classifyChange, isBlank, isCorrect, scoreAttempt } from '../lib/score';
 import { downloadBlob, downloadText, toCsv } from '../lib/csv';
 import { exportBackup } from '../lib/backup';
 import { fmtDuration } from '../lib/timer';
-import { fmtDateTime, go, useLive } from '../ui/hooks';
+import { examPdf, type PdfDoc } from '../lib/pdf';
+import { saveAttempt } from '../lib/store';
+import { fmtDateTime, useLive } from '../ui/hooks';
 import { TimeChart } from '../ui/charts';
-import { Check, Cross, IconFlag } from '../ui/icons';
+import { IconFlag } from '../ui/icons';
 import { MISS_REASONS } from '../types';
-import { Donut, ScoreBar } from '../ui/ScoreBar';
+import { Donut } from '../ui/ScoreBar';
 import { ExportPdfDialog } from '../ui/ExportPdfDialog';
 import { HBars } from '../ui/paperCharts';
+import { PaperModal } from '../ui/PaperModal';
+import { QuestionView } from '../ui/QuestionView';
 import { backupFileName, useFolderStatus } from './Home';
 
-type Show = 'correct' | 'incorrect' | 'marked' | 'omitted';
-const SHOWS: { id: Show; label: string }[] = [
-  { id: 'correct', label: 'Correct' },
-  { id: 'incorrect', label: 'Incorrect' },
-  { id: 'marked', label: 'Marked' },
-  { id: 'omitted', label: 'Omitted' },
-];
+const clock = (ms: number) => {
+  const t = Math.round(ms / 1000);
+  const h = Math.floor(t / 3600);
+  return `${h ? `${h}h:` : ''}${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}m:${String(t % 60).padStart(2, '0')}s`;
+};
+type Section = 'overview' | 'review' | 'subjects';
+type RFilter = 'all' | 'incorrect' | 'correct' | 'marked';
 
-function Chip({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-full border border-gray-300 bg-gray-50 px-2.5 py-0.5 text-xs text-gray-700">{children}</span>;
+/** One question in the "Question Review" list: folds open to show the page, the answers and the explanation. */
+function ReviewRow({ a, i, exams }: { a: Attempt; i: number; exams: Map<string, Exam> }) {
+  const it = a.items[i];
+  const exam = exams.get(it.examId);
+  const q = exam?.questions.find((x) => x.id === it.qid);
+  const [open, setOpen] = useState(false);
+  const [expl, setExpl] = useState(false);
+  const [doc, setDoc] = useState<PdfDoc | null>(null);
+  const texts = useLive(async () => (open && exam ? await db.pages.where('examId').equals(exam.id).toArray() : []), [open, exam?.id]);
+  const textMap = useMemo(() => new Map((texts ?? []).map((t) => [t.page, t])), [texts]);
+  useEffect(() => {
+    if (open && exam && !doc) examPdf(exam.id).then(setDoc, () => {});
+  }, [open, exam?.id]);
+  const r = isBlank(it) ? 'omitted' : isCorrect(it) ? 'correct' : 'incorrect';
+  const col = r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : 'var(--ink-2)';
+  const toggleMark = async () => {
+    const fresh = await db.attempts.get(a.id);
+    if (!fresh) return;
+    fresh.items[i] = { ...fresh.items[i], marked: !fresh.items[i].marked };
+    await saveAttempt(fresh);
+  };
+  return (
+    <div className="mb-3 border-2" style={{ borderColor: 'var(--rule)', background: 'var(--surface)' }} data-testid={`report-row-${i + 1}`} data-result={r === 'omitted' ? 'blank' : r}>
+      <button className="flex w-full items-center gap-3 px-8 py-6 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="serif text-[16px]">Question {i + 1}{exam ? <span style={{ color: 'var(--ink-2)' }}> · {exam.name} Q{it.number}</span> : null}</span>
+        <span className="mono border px-1.5 py-0.5 text-[10px] uppercase" style={{ color: col, borderColor: col }}>{r}</span>
+        <span className="mono text-[12px]" style={{ color: 'var(--ink-2)' }}>◷ {clock(it.timeMs)}</span>
+        {it.marked && <IconFlag size={12} />}
+        <span className="ml-auto" style={{ color: 'var(--ink-2)' }}>{open ? '⌃' : '⌄'}</span>
+      </button>
+      {open && (
+        <div className="px-8 pb-6">
+          <div className="mb-3 flex items-center justify-end gap-3 text-[13px]">
+            <button className="flex items-center gap-1 font-semibold" onClick={() => void toggleMark()} data-testid="row-mark">
+              <IconFlag size={12} /> {it.marked ? 'Unmark' : 'Mark'}
+            </button>
+            <a className="link" href={`#/review/${a.id}?i=${i}`}>Open in review →</a>
+          </div>
+          <dl className="mono mb-4 grid grid-cols-[70px_1fr] gap-y-1 text-[12px]">
+            <dt style={{ color: 'var(--ink-2)' }}>FOLDER</dt>
+            <dd className="font-semibold">{exam?.subject?.trim() || 'No folder'}</dd>
+            <dt style={{ color: 'var(--ink-2)' }}>EXAM</dt>
+            <dd className="font-semibold">{exam?.name ?? 'Deleted exam'}</dd>
+            <dt style={{ color: 'var(--ink-2)' }}>Q #</dt>
+            <dd>{it.number}</dd>
+          </dl>
+          <div className="mb-4 overflow-x-auto">{doc && exam && q ? <QuestionView exam={exam} question={q} doc={doc} texts={textMap} width={620} readOnly revealKey={it.key ?? ''} item={it} /> : <div className="text-[13px]" style={{ color: 'var(--ink-3)' }}>{exam ? 'Loading the page…' : 'This exam is no longer in the library.'}</div>}</div>
+          <div className="mono mb-3 text-[13px]">
+            Your answer: <b style={{ color: col }}>{it.answer ?? '—'}</b> · Correct answer: <b style={{ color: 'var(--good)' }}>{it.key ?? q?.answer ?? '—'}</b>
+            {classifyChange(it) && <> · changed {classifyChange(it)}</>}
+          </div>
+          <div className="border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+            <button className="link text-[14px]" onClick={() => setExpl((e) => !e)}>{expl ? 'Hide Explanation ⌃' : 'Show Explanation ⌄'}</button>
+            {expl && <div className="mt-3 whitespace-pre-wrap text-[14px] leading-relaxed">{q?.explanation?.trim() || 'No explanation was found in the answer key for this question.'}</div>}
+            {it.reviewNote?.trim() && <div className="mt-3 border-l-4 pl-3 text-[13px]" style={{ borderColor: 'var(--brand)' }}><b>My note:</b> {it.reviewNote}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Report({ attemptId }: { attemptId: string }) {
   const a = useLive(() => db.attempts.get(attemptId).then((x) => x ?? null), [attemptId]);
-  const exam = useLive(async () => (a?.examId ? ((await db.exams.get(a.examId)) ?? null) : null), [a?.examId]);
+  const examList = useLive(async () => (a ? (await db.exams.bulkGet([...new Set(a.items.map((i) => i.examId))])).filter((e): e is Exam => !!e) : []), [a?.id]);
   const folder = useFolderStatus();
-  const [tab, setTab] = useState<'results' | 'analysis'>('results');
-  const [show, setShow] = useState<Set<Show>>(new Set(['correct', 'incorrect', 'marked', 'omitted']));
-  const [showMenu, setShowMenu] = useState(false);
+  const [section, setSection] = useState<Section>('overview');
+  const [rf, setRf] = useState<RFilter>('all');
   const [msg, setMsg] = useState('');
   const [pdf, setPdf] = useState(false);
-  if (a === undefined) return <div className="text-sm">Loading…</div>;
-  if (a === null) return <div>This attempt was not found. <a className="link" href="#/">Back to the library</a></div>;
+  const [content, setContent] = useState(false);
+  const [naming, setNaming] = useState(false);
+  const [nm, setNm] = useState('');
+  if (a === undefined || examList === undefined) return <div className="text-sm">Loading…</div>;
+  if (a === null) return <div>This attempt was not found. <a className="link" href="#/history">Back to Test History</a></div>;
   if (a.status !== 'completed') return <div>This block is not finished yet. <a className="link" href={`#/test/${a.id}`}>Resume it</a></div>;
+  const exams = new Map(examList.map((e) => [e.id, e]));
   const s = scoreAttempt(a);
   const ungraded = a.items.filter((i) => !i.key).length;
-
+  const took = a.blocks.reduce((n, b) => n + b.timer.elapsedMs, 0);
+  const isTimed = a.blocks.some((b) => b.limitMs != null);
   const csv = () => {
     const rows: (string | number | null)[][] = [['Question', 'Exam question #', 'My answer', 'Correct answer', 'Result', 'Time (s)', 'Marked', 'Answer change', 'Reason for miss', 'Test note', 'Review note']];
     a.items.forEach((it, i) =>
@@ -47,234 +114,241 @@ export function Report({ attemptId }: { attemptId: string }) {
     );
     downloadText(toCsv(rows), `test-simulator-results-${new Date(a.completedAt ?? Date.now()).toISOString().slice(0, 10)}.csv`);
   };
-  const visible = a.items
-    .map((it, i) => ({ it, i }))
-    .filter(({ it }) => {
-      const kind: Show = isBlank(it) ? 'omitted' : isCorrect(it) ? 'correct' : 'incorrect';
-      return show.has(kind) || (show.has('marked') && it.marked);
-    });
-  const modeChips = [a.mode === 'tutor' ? 'Tutor' : 'Untutored', a.blocks.some((b) => b.limitMs != null) ? 'Timed' : 'Untimed'];
+  const saveName = async () => {
+    const fresh = await db.attempts.get(a.id);
+    if (fresh && nm.trim()) await saveAttempt({ ...fresh, name: nm.trim() });
+    setNaming(false);
+  };
+  const counts = { all: a.items.length, incorrect: a.items.filter((i) => !isBlank(i) && !isCorrect(i)).length, correct: a.items.filter(isCorrect).length, marked: a.items.filter((i) => i.marked).length };
+  const visible = a.items.map((it, i) => ({ it, i })).filter(({ it }) => (rf === 'all' ? true : rf === 'incorrect' ? !isBlank(it) && !isCorrect(it) : rf === 'correct' ? isCorrect(it) : it.marked));
+  // results per folder and per exam
+  const groupBy = (key: (examId: string) => string) => {
+    const m = new Map<string, { c: number; t: number; ms: number }>();
+    for (const it of a.items) {
+      const k = key(it.examId);
+      const g = m.get(k) ?? { c: 0, t: 0, ms: 0 };
+      g.t++;
+      g.ms += it.timeMs;
+      if (isCorrect(it)) g.c++;
+      m.set(k, g);
+    }
+    return [...m.entries()];
+  };
+  const byFolder = groupBy((id) => exams.get(id)?.subject?.trim() || 'No folder');
+  const byExam = groupBy((id) => exams.get(id)?.name ?? 'Deleted exam');
+  const navBtn = (id: Section, label: string) => (
+    <button className="block w-full px-2.5 py-2 text-left text-[14px] font-semibold" style={section === id ? { background: 'var(--navy)', color: 'var(--bg)' } : { color: 'var(--ink-2)' }} onClick={() => setSection(id)} data-testid={`section-${id}`}>
+      {label}
+    </button>
+  );
 
   return (
     <div data-testid="report">
       {pdf && <ExportPdfDialog attempt={a} onClose={() => setPdf(false)} />}
-      <a className="link text-sm" href="#/history">← Test History</a>
-      <div className="card accent-top mt-3 p-7" data-testid="report-head">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="min-w-0">
-            <div className="eyebrow mb-1">Examination report</div>
-            <h1 className="text-[28px] font-bold leading-tight">{a.name}</h1>
-            <div className="mono mt-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
-              {exam?.subject ? `${exam.subject.toUpperCase()} · ` : ''}
-              {exam && exam.name !== a.name ? `${exam.name} · ` : ''}
-              {fmtDateTime(a.completedAt)} · {fmtDuration(s.timeMs)} · {modeChips.join(' / ')}
-            </div>
+      <div className="flex flex-wrap items-end justify-between gap-6 border-b-2 pb-6" style={{ borderColor: 'var(--line)' }}>
+        <div className="min-w-0">
+          <a className="link text-[14px]" href="#/history">← Return to History Ledger</a>
+          <div className="flex flex-wrap items-end gap-10">
+            <h1 className="mt-1 text-[36px] font-bold leading-[40px]">Examination<br />Report</h1>
           </div>
+          {naming ? (
+            <form className="mt-1 flex gap-1" onSubmit={(e) => { e.preventDefault(); void saveName(); }}>
+              <input className="field py-1 text-[13px]" autoFocus value={nm} maxLength={100} onChange={(e) => setNm(e.target.value)} onBlur={() => void saveName()} data-testid="report-name-input" />
+            </form>
+          ) : (
+            <button className="mt-1 block text-[14px]" style={{ color: 'var(--ink-2)' }} onClick={() => { setNm(a.name); setNaming(true); }} data-testid="report-name">✎ {a.name || 'Add a name'}</button>
+          )}
+          <ul className="mono mt-1 text-[13px]" style={{ color: 'var(--ink)' }}>
+            <li>• Date: {fmtDateTime(a.completedAt)}</li>
+            <li>• Total Time Taken: {clock(took)}</li>
+            <li>• Answer Time: {clock(s.timeMs)}</li>
+          </ul>
+        </div>
+        <div className="flex flex-col items-end gap-4">
           <div className="text-right">
-            <div className="eyebrow">Final score</div>
-            <div className="mono text-[48px] font-bold leading-none" style={{ color: s.pct >= 70 ? 'var(--good)' : s.pct >= 50 ? 'var(--warn)' : 'var(--bad)' }}>{Math.round(s.pct)}%</div>
-            <div className="mono text-[12px]" style={{ color: 'var(--ink-2)' }}>{s.correct} / {s.total} correct</div>
+            <div className="serif text-[12px]">Final Score</div>
+            <div className="mono text-[36px] font-bold leading-none" style={{ color: 'var(--ink)' }} data-testid="score-pct">{s.pct.toFixed(1)}%</div>
           </div>
-        </div>
-        <div className="mt-5 flex flex-wrap gap-2 border-t pt-5" style={{ borderColor: 'var(--line)' }}>
-          <a className="btn" href={`#/review/${a.id}?filter=incorrect`} data-testid="review-incorrect">Find incorrect</a>
-          <a className="btn" href={`#/review/${a.id}`}>All questions</a>
-          <a className="btn-primary" href={`#/review/${a.id}`} data-testid="review-all">Review Test</a>
-          <span className="ml-auto" />
-          <button className="btn" onClick={() => setPdf(true)} data-testid="report-pdf">Export as PDF</button>
-          <button className="btn" onClick={csv} data-testid="report-csv">Export CSV</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <a className="btn btn-caps" href={`#/review/${a.id}?filter=incorrect`} data-testid="review-incorrect">Find incorrect questions</a>
+            <a className="btn btn-caps" href={`#/review/${a.id}`}>All questions</a>
+            <button className="btn btn-caps" onClick={() => setPdf(true)} data-testid="report-pdf">Export PDF</button>
+            <button className="btn btn-caps" onClick={csv} data-testid="report-csv">CSV</button>
+            <a className="btn-primary btn-caps" href={`#/review/${a.id}`} data-testid="review-all">Review in test mode</a>
+          </div>
         </div>
       </div>
 
-      <div className="card mt-5 p-6">
-
-        <div className="flex gap-6 border-b" style={{ borderColor: 'var(--line)' }} role="tablist">
-          {(['results', 'analysis'] as const).map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} className="-mb-px border-b-2 pb-2 text-[15px]" style={{ borderColor: tab === t ? 'var(--brand, #1c4973)' : 'transparent', color: tab === t ? 'var(--ink, #111)' : 'var(--ink-3, #6b7280)', fontWeight: tab === t ? 600 : 400 }} onClick={() => setTab(t)} data-testid={`tab-${t}`}>
-              {t === 'results' ? 'Overview' : 'Analysis'}
-            </button>
-          ))}
+      <div className="mt-8 grid items-start gap-6 lg:grid-cols-[220px_1fr]">
+        <div className="space-y-6">
+          <div className="p-4" style={{ background: 'var(--surface-2)', border: '2px solid var(--line)' }}>
+            <div className="mb-3 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Report Sections</div>
+            {navBtn('overview', 'Report Overview')}
+            {navBtn('review', 'Question Review')}
+            {navBtn('subjects', 'Subject Analysis')}
+          </div>
+          <div className="p-4" style={{ background: 'var(--surface-2)', border: '2px solid var(--line)' }} data-testid="dossier">
+            <div className="mb-3 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Test Dossier</div>
+            <dl className="mono space-y-1.5 text-[12px]">
+              {(
+                [
+                  ['Exam:', a.examId ? (exams.get(a.examId)?.name ?? 'Deleted') : `${exams.size} exams`, undefined],
+                  ['Mode:', <span key="m" className="badge-mode">{a.mode === 'tutor' ? 'Tutor' : 'Test'} · {isTimed ? 'Timed' : 'Untimed'}</span>, undefined],
+                  ['Total Time:', clock(took), undefined],
+                  ['Answer Time:', clock(s.timeMs), undefined],
+                  ['Answered:', `${s.total - s.blank} / ${s.total}`, undefined],
+                  ['Correct:', <b key="c" data-testid="score-correct">{s.correct}</b>, 'var(--good)'],
+                  ['Incorrect:', <b key="w" data-testid="score-wrong">{s.wrong}</b>, 'var(--bad)'],
+                  ['Omitted:', <b key="b" data-testid="score-blank">{s.blank}</b>, undefined],
+                ] as [string, React.ReactNode, string | undefined][]
+              ).map(([k, v, c]) => (
+                <div key={k} className="flex justify-between gap-2">
+                  <dt>{k}</dt>
+                  <dd className="text-right font-bold" style={{ color: c }}>{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <button className="btn mt-4 w-full" onClick={() => setContent(true)} data-testid="content-list">☰ Folders/Exams List</button>
+          </div>
         </div>
 
-        {tab === 'results' ? (
-          <>
-            <div className="mt-5" data-testid="response-sheet">
-              <div className="eyebrow mb-2">Response sheet</div>
-              <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(46px, 1fr))' }}>
-                {a.items.map((it, i) => {
-                  const r = isBlank(it) ? 'blank' : isCorrect(it) ? 'correct' : 'incorrect';
-                  return (
-                    <a key={i} href={`#/review/${a.id}?i=${i}`} className="mono flex flex-col items-center border py-1 text-[11px] hover:opacity-80" title={`Question ${i + 1}: ${r}`} style={{ borderColor: r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : 'var(--line-strong)', background: r === 'correct' ? 'color-mix(in srgb, var(--good) 10%, var(--surface))' : r === 'incorrect' ? 'color-mix(in srgb, var(--bad) 10%, var(--surface))' : 'var(--surface)' }}>
-                      <span style={{ color: 'var(--ink-3)' }}>{i + 1}{it.marked ? '⚑' : ''}</span>
-                      <b style={{ color: r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : 'var(--ink-3)' }}>{it.answer ?? '–'}</b>
-                    </a>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="mt-6 grid gap-6 md:grid-cols-2">
-              <div>
-                <div className="mb-2 text-[15px] text-gray-700">Your Score</div>
-                <div className="mb-1 text-3xl font-bold" style={{ color: s.pct >= 70 ? '#15803d' : s.pct >= 50 ? '#b45309' : '#b91c1c' }} data-testid="score-pct">
-                  {Math.round(s.pct)}%
-                </div>
-                <ScoreBar correct={s.correct} wrong={s.wrong} blank={s.blank} height={12} />
-                <div className="mt-1 flex gap-4 text-sm">
-                  <span className="text-green-700"><b data-testid="score-correct">{s.correct}</b> correct</span>
-                  <span className="text-red-700"><b data-testid="score-wrong">{s.wrong}</b> incorrect</span>
-                  <span className="text-gray-600"><b data-testid="score-blank">{s.blank}</b> omitted</span>
-                </div>
-              </div>
-              <div>
-                <div className="mb-2 text-[15px] text-gray-700">Test Settings</div>
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-1.5 text-gray-600">Mode</td>
-                      <td className="py-1.5 text-right">{modeChips.map((c) => <Chip key={c}>{c}</Chip>).reduce((p, c) => <>{p} {c}</>)}</td>
-                    </tr>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-1.5 text-gray-600">Questions</td>
-                      <td className="py-1.5 text-right"><Chip>{s.total}</Chip></td>
-                    </tr>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-1.5 text-gray-600">Time used</td>
-                      <td className="py-1.5 text-right"><Chip>{fmtDuration(s.timeMs)}</Chip> <Chip>avg {fmtDuration(s.avgMs)} / question</Chip></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {ungraded > 0 && <div className="mt-3 rounded border border-yellow-600 bg-yellow-50 p-2 text-sm">{ungraded} question{ungraded === 1 ? ' has' : 's have'} no answer in the key and count as not correct. Add them under “Edit answer key” and this report updates.</div>}
-
-            <div className="mt-5 flex items-center justify-end gap-2 text-sm">
-              <span className="text-gray-600">Show:</span>
-              <div className="relative">
-                <button className="field min-w-[140px] text-left" onClick={() => setShowMenu((v) => !v)} data-testid="show-filter">
-                  {show.size === 4 ? 'All' : [...show].map((x) => SHOWS.find((y) => y.id === x)!.label).join(', ') || 'None'} ▾
-                </button>
-                {showMenu && (
-                  <div className="absolute right-0 z-10 mt-1 w-44 rounded border border-gray-300 bg-white p-1 shadow-lg">
-                    {SHOWS.map((o) => (
-                      <label key={o.id} className="flex items-center gap-2 px-2 py-1">
-                        <input
-                          type="checkbox"
-                          checked={show.has(o.id)}
-                          data-testid={`show-${o.id}`}
-                          onChange={(e) => {
-                            const n = new Set(show);
-                            if (e.target.checked) n.add(o.id);
-                            else n.delete(o.id);
-                            setShow(n);
-                          }}
-                        />
-                        {o.label}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full border-collapse text-sm" data-testid="report-table">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-600">
-                    <th className="px-3 py-2"></th>
-                    <th className="px-3 py-2">Question</th>
-                    <th className="px-3 py-2">Your answer</th>
-                    <th className="px-3 py-2">Correct</th>
-                    <th className="px-3 py-2">Time spent</th>
-                    <th className="px-3 py-2">Answer change</th>
-                    <th className="px-3 py-2">Reason</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map(({ it, i }) => (
-                    <tr key={i} className="cursor-pointer border-b border-gray-100 hover:bg-blue-50" onClick={() => go(`/review/${a.id}?i=${i}`)} data-testid={`report-row-${i + 1}`} data-result={isBlank(it) ? 'blank' : isCorrect(it) ? 'correct' : 'incorrect'}>
-                      <td className="px-3 py-2.5">{isCorrect(it) ? <Check /> : isBlank(it) ? <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-blue-500" title="Omitted" /> : <Cross />}</td>
-                      <td className="px-3 py-2.5">
+        <div className="min-w-0">
+          {ungraded > 0 && <div className="mb-4 border-2 p-3 text-[13px]" style={{ borderColor: 'var(--warn)' }}>{ungraded} question{ungraded === 1 ? ' has' : 's have'} no answer in the key and count as not correct. Add them under “Edit answer key” and this report updates.</div>}
+          {section === 'overview' && (
+            <div className="space-y-6">
+              <section className="card p-6" data-testid="response-sheet">
+                <h3 className="mb-5 text-[16px] font-normal">Response Sheet</h3>
+                <div className="flex flex-wrap gap-3">
+                  {a.items.map((it, i) => {
+                    const r = isBlank(it) ? 'blank' : isCorrect(it) ? 'correct' : 'incorrect';
+                    return (
+                      <a key={i} href={`#/review/${a.id}?i=${i}`} className="mono flex h-[42px] w-[42px] items-center justify-center text-[12px] font-bold text-white hover:opacity-80" title={`Question ${i + 1}: ${r}${it.marked ? ' (marked)' : ''}`} style={{ background: r === 'correct' ? 'var(--good)' : r === 'incorrect' ? 'var(--bad)' : '#9aa5ae', outline: it.marked ? '2px solid #d97706' : undefined, outlineOffset: 1 }}>
                         {i + 1}
-                        {it.number !== i + 1 && <span className="text-gray-500"> (Q{it.number})</span>} {it.marked && <IconFlag size={11} />}
-                      </td>
-                      <td className="px-3 py-2.5">{it.answer ?? '—'}</td>
-                      <td className="px-3 py-2.5">{it.key ?? ''}</td>
-                      <td className="px-3 py-2.5">{fmtDuration(it.timeMs)}</td>
-                      <td className="px-3 py-2.5">{classifyChange(it) ?? ''}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{MISS_REASONS.find((r) => r.id === it.missReason)?.label ?? ''}</td>
-                      <td className="px-3 py-2.5 text-right text-gray-400">›</td>
-                    </tr>
+                      </a>
+                    );
+                  })}
+                </div>
+              </section>
+              <section className="card p-6" data-testid="analysis">
+                <h3 className="mb-5 text-[16px] font-normal">Test Analysis</h3>
+                <div className="grid items-center gap-8 md:grid-cols-3">
+                  <div className="flex items-center gap-5">
+                    <Donut correct={s.correct} wrong={s.wrong} blank={s.blank} />
+                    <div className="mono text-[12px]">
+                      <div style={{ color: 'var(--good)' }}>{s.correct} correct</div>
+                      <div style={{ color: 'var(--bad)' }}>{s.wrong} incorrect</div>
+                      <div style={{ color: 'var(--ink-2)' }}>{s.blank} omitted</div>
+                    </div>
+                  </div>
+                  <div className="mono text-[12px]" data-testid="changes">
+                    <div className="eyebrow mb-2">Answer changes</div>
+                    <div className="flex justify-between"><span>Correct → Incorrect</span><b data-testid="chg-rw">{s.changes['right→wrong']}</b></div>
+                    <div className="flex justify-between"><span>Incorrect → Correct</span><b data-testid="chg-wr">{s.changes['wrong→right']}</b></div>
+                    <div className="flex justify-between"><span>Incorrect → Incorrect</span><b>{s.changes['wrong→wrong']}</b></div>
+                  </div>
+                  <div className="mono text-[12px]">
+                    <div className="eyebrow mb-2">Time</div>
+                    <div className="flex justify-between"><span>Average per question</span><b>{fmtDuration(s.avgMs)}</b></div>
+                    <div className="flex justify-between"><span>Marked</span><b>{counts.marked}</b></div>
+                  </div>
+                </div>
+                <div className="eyebrow mb-2 mt-6">Time per question</div>
+                <TimeChart times={s.times} />
+              </section>
+            </div>
+          )}
+          {section === 'review' && (
+            <div data-testid="question-review">
+              <div className="mb-1 inline-flex border-2" style={{ borderColor: 'var(--line)' }}>
+                {(
+                  [
+                    ['all', 'All', undefined],
+                    ['incorrect', 'Incorrect', 'var(--bad)'],
+                    ['correct', 'Correct', 'var(--good)'],
+                    ['marked', 'Marked', '#d97706'],
+                  ] as [RFilter, string, string | undefined][]
+                ).map(([k, l, c]) => (
+                  <button key={k} className="flex items-center gap-2 px-4 py-1.5 text-[13px] font-semibold" style={rf === k ? { background: 'var(--navy)', color: 'var(--bg)' } : { background: 'var(--surface)', color: 'var(--ink)' }} onClick={() => setRf(k)} data-testid={`rf-${k}`} disabled={!counts[k]}>
+                    {c && <span className="h-2.5 w-2.5" style={{ background: c }} />}
+                    {l} <span className="mono text-[11px] opacity-70">{counts[k]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mono mb-4 text-[11px]" style={{ color: 'var(--ink-2)' }}>
+                Showing {visible.length} of {s.total} questions
+              </div>
+              {visible.map(({ i }) => (
+                <ReviewRow key={i} a={a} i={i} exams={exams} />
+              ))}
+            </div>
+          )}
+          {section === 'subjects' && (
+            <section className="card p-6" data-testid="subject-analysis">
+              <h3 className="mb-5 text-[16px] font-normal">Subject Performance Analysis</h3>
+              {(
+                [
+                  ['By folder', byFolder],
+                  ['By exam', byExam],
+                ] as const
+              ).map(([title, list]) => (
+                <div key={title} className="mb-6">
+                  <div className="eyebrow mb-3">{title}</div>
+                  {list.map(([name, g]) => (
+                    <div key={name} className="mb-4 px-4">
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <span className="serif text-[15px] font-bold">
+                          {name} <span className="text-[12px] font-normal" style={{ color: 'var(--ink-2)' }}>({clock(g.ms)})</span>
+                        </span>
+                        <span className="mono text-[12px]">
+                          {g.c} / {g.t} <b className="text-[14px]">{Math.round((g.c / Math.max(1, g.t)) * 100)}%</b>
+                        </span>
+                      </div>
+                      <div className="flex h-1.5">
+                        <span style={{ width: `${(g.c / Math.max(1, g.t)) * 100}%`, background: 'var(--good)' }} />
+                        <span style={{ flex: 1, background: 'var(--bad)' }} />
+                      </div>
+                    </div>
                   ))}
-                  {!visible.length && (
-                    <tr>
-                      <td colSpan={8} className="px-3 py-4 text-center text-gray-500">No questions match the filter.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <div data-testid="analysis">
-            <div className="mt-6 grid items-center gap-8 md:grid-cols-3">
-              <div className="flex items-center gap-5">
-                <Donut correct={s.correct} wrong={s.wrong} blank={s.blank} />
-                <table className="text-sm">
-                  <tbody>
-                    {[
-                      ['Correct', s.correct, '#16a34a'],
-                      ['Incorrect', s.wrong, '#dc2626'],
-                      ['Omitted', s.blank, '#9ca3af'],
-                    ].map(([l, n, c]) => (
-                      <tr key={l as string} className="border-b border-gray-100">
-                        <td className="py-1.5 pr-6">
-                          <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: c as string }} />
-                          {l}
-                        </td>
-                        <td className="py-1.5 text-right font-bold">{n}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div>
-                <div className="mb-2 text-[15px] text-gray-700">Answer Changes</div>
-                <table className="w-full text-sm" data-testid="changes">
-                  <tbody>
-                    <tr className="border-b border-gray-100"><td className="py-1.5">Correct to Incorrect</td><td className="py-1.5 text-right font-bold" data-testid="chg-rw">{s.changes['right→wrong']}</td></tr>
-                    <tr className="border-b border-gray-100"><td className="py-1.5">Incorrect to Correct</td><td className="py-1.5 text-right font-bold" data-testid="chg-wr">{s.changes['wrong→right']}</td></tr>
-                    <tr className="border-b border-gray-100"><td className="py-1.5">Incorrect to Incorrect</td><td className="py-1.5 text-right font-bold">{s.changes['wrong→wrong']}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div>
-                <div className="mb-2 text-[15px] text-gray-700">Time</div>
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr className="border-b border-gray-100"><td className="py-1.5">Total</td><td className="py-1.5 text-right font-bold">{fmtDuration(s.timeMs)}</td></tr>
-                    <tr className="border-b border-gray-100"><td className="py-1.5">Average per question</td><td className="py-1.5 text-right font-bold">{fmtDuration(s.avgMs)}</td></tr>
-                    <tr className="border-b border-gray-100"><td className="py-1.5">Marked</td><td className="py-1.5 text-right font-bold">{a.items.filter((i) => i.marked).length}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {s.byTag.length > 0 && (
-              <div className="mt-6" data-testid="subject-analysis">
-                <div className="eyebrow mb-3">Subject analysis</div>
-                <HBars rows={s.byTag.map((t) => ({ name: `${t.label} (${t.correct}/${t.total})`, value: t.total ? (t.correct / t.total) * 100 : null }))} />
-              </div>
-            )}
-            <div className="mt-6 text-[15px] text-gray-700">Time per question</div>
-            <TimeChart times={s.times} />
-            <div className="text-xs text-gray-600">Green = correct, red = incorrect, grey = omitted. Hover a bar for details.</div>
-          </div>
-        )}
+                </div>
+              ))}
+              {s.byTag.length > 0 && (
+                <div>
+                  <div className="eyebrow mb-3">By tag</div>
+                  <HBars rows={s.byTag.map((t) => ({ name: `${t.label} (${t.correct}/${t.total})`, value: t.total ? (t.correct / t.total) * 100 : null }))} />
+                </div>
+              )}
+            </section>
+          )}
+        </div>
       </div>
+
+      {content && (
+        <PaperModal title="Test Content Details" onClose={() => setContent(false)} width={720} footer={<button className="btn" onClick={() => setContent(false)}>Close</button>}>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {(
+              [
+                ['Folders', byFolder],
+                ['Exams', byExam],
+              ] as const
+            ).map(([t, list]) => (
+              <div key={t}>
+                <div className="eyebrow mb-2 border-b pb-1" style={{ borderColor: 'var(--line)' }}>{t}</div>
+                {list.map(([n, g]) => (
+                  <div key={n} className="flex justify-between gap-2 py-1 text-[13px] font-semibold">
+                    <span className="truncate">{n}</span>
+                    <span className="mono">{g.t}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </PaperModal>
+      )}
 
       {!folder.connected && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded border border-gray-300 bg-white p-2 text-sm" data-testid="backup-offer">
-          This block is saved on this device. Keep a copy somewhere safe:
-          <button className="btn" data-testid="report-backup" onClick={async () => { setMsg('Preparing…'); downloadBlob(await exportBackup(), backupFileName()); setMsg('Backup saved to Downloads.'); }}>
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-2 p-3 text-[13px]" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }} data-testid="backup-offer">
+          This test is saved on this device. Keep a copy somewhere safe:
+          <button className="btn btn-sm" data-testid="report-backup" onClick={async () => { setMsg('Preparing…'); downloadBlob(await exportBackup(), backupFileName()); setMsg('Backup saved to Downloads.'); }}>
             Back up now
           </button>
           {msg && <span>{msg}</span>}

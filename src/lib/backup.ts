@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzip, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
 import { APP_VERSION, SCHEMA_VERSION } from '../config';
-import { db, migrateAttempt, migrateExam, setMeta } from '../db';
+import { getMeta, db, migrateAttempt, migrateExam, setMeta } from '../db';
 import type { Attempt, Exam, PageText, ReviewRecord } from '../types';
 import { applyTombstones, betterAttempt, mergeById, mergeReviews, mergeTombstones, type Tombstone } from './merge';
 import { getTombstones } from './store';
@@ -36,6 +36,10 @@ export async function collectFiles(opts: { examId?: string; withPdfs?: boolean }
   const exams = opts.examId ? (await db.exams.where('id').equals(opts.examId).toArray()) : await db.exams.toArray();
   json.set('manifest.json', manifest());
   if (!opts.examId) json.set('deleted.json', await getTombstones());
+  if (!opts.examId) {
+    const colls = await getMeta<unknown[]>('noteCollections', []);
+    if (colls.length) json.set('collections.json', colls);
+  }
   for (const e of exams) {
     json.set(paths.exam(e.id), e);
     const pages = await db.pages.where('examId').equals(e.id).toArray();
@@ -158,6 +162,17 @@ export async function mergeIntoDb(files: FileSet, opts: { resurrect?: boolean } 
       forgetPdf(id);
       pdfs++;
     }
+  }
+  // note collections: union by id, keeping every note in either copy
+  const inColls = files.json.get('collections.json') as { id: string; name: string; keys: string[] }[] | undefined;
+  if (Array.isArray(inColls) && inColls.length) {
+    const mine = await getMeta<{ id: string; name: string; keys: string[] }[]>('noteCollections', []);
+    const byId = new Map(mine.map((c) => [c.id, c]));
+    for (const c of inColls) {
+      const m = byId.get(c.id);
+      byId.set(c.id, m ? { ...m, keys: [...new Set([...m.keys, ...(c.keys ?? [])])] } : c);
+    }
+    await setMeta('noteCollections', [...byId.values()]);
   }
   const havePages = new Set((await db.pages.toCollection().primaryKeys()) as string[]);
   const newPages = inPages.filter((p) => keepExam.has(p.examId) && !havePages.has(p.id));

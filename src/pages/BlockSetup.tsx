@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DEFAULT_SEC_PER_Q, STORAGE_PREFIX } from '../config';
 import { db } from '../db';
 import type { Exam, Mode } from '../types';
@@ -7,19 +7,14 @@ import { buildMissedBank } from '../lib/missed';
 import { saveAttempt } from '../lib/store';
 import { fmtDuration } from '../lib/timer';
 import { go, useLive } from '../ui/hooks';
-import { H1 } from '../ui/Shell';
 import { questionStats } from '../lib/stats';
+import { useActiveExamId } from '../lib/activeExam';
+import { PaperModal } from '../ui/PaperModal';
 
-function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
-  return (
-    <section className="card mb-5 p-6">
-      <h2 className="mb-4 flex items-baseline gap-3 text-[18px] font-bold"><span className="mono text-[13px]" style={{ color: 'var(--brand)' }}>{n}.</span>{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-type Sel = 'all' | 'range' | 'random' | 'missed' | 'marked' | 'unused' | 'used' | 'correct' | 'incorrect' | 'custom';
+type Sel = 'all' | 'marked' | 'used' | 'unused' | 'correct' | 'incorrect' | 'missed' | 'custom';
+type Preset = 'standard' | 'shelf' | 'custom';
+export const BANK_KEY = STORAGE_PREFIX + 'bank-qids';
+const folderOf = (e: Exam) => e.subject?.trim() || 'No folder';
 
 /** "1-5, 9, 12" → question numbers */
 export function parseNumbers(t: string): Set<number> {
@@ -33,17 +28,81 @@ export function parseNumbers(t: string): Set<number> {
   }
   return out;
 }
-type Preset = 'standard' | 'shelf' | 'custom';
-export const BANK_KEY = STORAGE_PREFIX + 'bank-qids';
 
-export function BlockSetup({ examId, preset: pick, bank }: { examId: string | null; preset: string | null; bank: boolean }) {
+function Section({ n, title, action, children }: { n: string; title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="mb-10">
+      <div className="mb-5 flex items-baseline justify-between gap-3 border-b-2 pb-3" style={{ borderColor: 'var(--line)' }}>
+        <h2 className="text-[24px] font-bold">
+          <span style={{ color: 'var(--brand)' }}>{n}.</span> {title}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A checkbox list in a dialog, with search; "systems" can be expanded under each group. */
+function PickDialog({ title, groups, chosen, onDone, onClose }: { title: string; groups: { id: string; label: string; items?: { id: string; label: string }[] }[]; chosen: Set<string>; onDone: (s: Set<string>) => void; onClose: () => void }) {
+  const [sel, setSel] = useState(new Set(chosen));
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const t = q.trim().toLowerCase();
+  const shown = groups.filter((g) => !t || g.label.toLowerCase().includes(t) || g.items?.some((i) => i.label.toLowerCase().includes(t)));
+  const toggle = (id: string) => setSel((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
+  return (
+    <PaperModal
+      title={title}
+      onClose={onClose}
+      width={600}
+      testId="pick-dialog"
+      footer={
+        <>
+          <button className="btn" onClick={() => setSel(new Set(groups.map((g) => g.id)))}>Select all</button>
+          <button className="btn-primary btn-caps" onClick={() => onDone(sel)} data-testid="pick-done" disabled={!sel.size}>✓ Done</button>
+        </>
+      }
+    >
+      <input className="field mb-3 w-full" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+      <div className="space-y-1.5">
+        {shown.map((g) => (
+          <div key={g.id} style={{ background: 'var(--surface-2)' }}>
+            <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-[14px] font-semibold">
+              <input type="checkbox" className="h-4 w-4" checked={sel.has(g.id)} onChange={() => toggle(g.id)} />
+              {g.items?.length ? (
+                <button type="button" className="w-3 text-[11px]" onClick={(e) => { e.preventDefault(); setOpen((o) => { const n = new Set(o); if (n.has(g.id)) n.delete(g.id); else n.add(g.id); return n; }); }} aria-label="Show exams">
+                  {open.has(g.id) ? '⌄' : '›'}
+                </button>
+              ) : null}
+              <span className="flex-1">{g.label}</span>
+              {g.items && <span className="mono text-[11px] font-normal" style={{ color: 'var(--ink-2)' }}>{g.items.length} exam{g.items.length === 1 ? '' : 's'}</span>}
+            </label>
+            {open.has(g.id) && g.items && (
+              <div className="border-t px-10 py-1.5 text-[13px]" style={{ borderColor: 'var(--line)' }}>
+                {g.items.map((i) => (
+                  <div key={i.id} className="py-0.5" style={{ color: 'var(--ink-2)' }}>{i.label}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </PaperModal>
+  );
+}
+
+export function BlockSetup({ examId: rawId, preset: pick, bank }: { examId: string | null; preset: string | null; bank: boolean }) {
+  const activeId = useActiveExamId();
   const exams = useLive(() => db.exams.toArray(), []);
   const attempts = useLive(() => db.attempts.toArray(), []);
   const reviews = useLive(() => db.reviews.toArray(), []);
   const [sel, setSel] = useState<Sel>(pick === 'missed' ? 'missed' : 'all');
-  const [from, setFrom] = useState(1);
-  const [to, setTo] = useState(0);
-  const [randomN, setRandomN] = useState(40);
   const [order, setOrder] = useState<'sequential' | 'random'>('sequential');
   const [tutor, setTutor] = useState(bank);
   const [timed, setTimed] = useState(!bank);
@@ -54,8 +113,13 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
   const [breakMin, setBreakMin] = useState('');
   const [busy, setBusy] = useState(false);
   const [custom, setCustom] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
   const [name, setName] = useState('');
+  const [n, setN] = useState<number | null>(null);
+  const [extraExams, setExtraExams] = useState<string[] | null>(null);
+  const [dialog, setDialog] = useState<'folders' | 'exams' | null>(null);
 
+  const examId = rawId === 'active' ? (exams?.find((e) => e.id === activeId)?.id ?? exams?.find((e) => !e.isDemo)?.id ?? exams?.[0]?.id ?? null) : rawId;
   const exam: Exam | undefined = exams?.find((e) => e.id === examId);
   const bankIds: string[] = useMemo(() => {
     if (!bank) return [];
@@ -65,44 +129,49 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       return [];
     }
   }, [bank]);
-  useEffect(() => {
-    if (exam && to === 0) setTo(exam.questions.length);
-  }, [exam?.id]);
 
   const qs = useMemo(() => questionStats(attempts ?? []), [attempts]);
   const rows = useMemo(() => (attempts && reviews ? buildMissedBank(attempts, reviews) : []), [attempts, reviews]);
   if (!exams || !attempts || !reviews) return <div className="text-sm">Loading…</div>;
-  if (!bank && !exam) return <div>This exam was not found. <a className="link" href="#/">Back to the library</a></div>;
+  if (!bank && !exam) return <div>This exam was not found. <a className="link" href="#/exams">Back to the library</a></div>;
 
   const missedIds = new Set(rows.filter((r) => r.why.includes('wrong') && r.schedule.status !== 'Mastered').map((r) => r.qid));
-  const markedIds = new Set(rows.filter((r) => r.why.includes('marked')).map((r) => r.qid));
+  const markedIds = new Set([...rows.filter((r) => r.why.includes('marked')).map((r) => r.qid), ...[...qs.entries()].filter(([, v]) => v.marked).map(([k]) => k)]);
+  const chosenIds = extraExams ?? (exam ? [exam.id] : []);
+  const chosen = exams.filter((e) => chosenIds.includes(e.id));
+  const folders = [...new Set(chosen.map(folderOf))];
+  const allFolders = [...new Set(exams.map(folderOf))].sort();
 
   // ---- build the pool ----
-  let pool: Pick[] = [];
+  let base: Pick[] = [];
   if (bank) {
     const byId = new Map<string, Pick>();
     for (const e of exams) for (const q of e.questions) byId.set(q.id, { exam: e, q });
-    pool = bankIds.map((id) => byId.get(id)).filter((p): p is Pick => !!p);
-  } else if (exam) {
-    const all = exam.questions.map((q) => ({ exam, q }));
-    if (sel === 'all' || sel === 'random') pool = all;
-    else if (sel === 'range') pool = all.filter((p) => p.q.number >= from && p.q.number <= to);
-    else if (sel === 'missed') pool = all.filter((p) => missedIds.has(p.q.id));
-    else if (sel === 'marked') pool = all.filter((p) => markedIds.has(p.q.id));
-    else if (sel === 'unused') pool = all.filter((p) => !qs.get(p.q.id)?.used);
-    else if (sel === 'used') pool = all.filter((p) => qs.get(p.q.id)?.used);
-    else if (sel === 'correct') pool = all.filter((p) => qs.get(p.q.id)?.last === 'correct');
-    else if (sel === 'incorrect') pool = all.filter((p) => { const l = qs.get(p.q.id)?.last; return l === 'incorrect' || l === 'omitted'; });
-    else if (sel === 'custom') { const ns = parseNumbers(custom); pool = all.filter((p) => ns.has(p.q.number)); }
-  }
+    base = bankIds.map((id) => byId.get(id)).filter((p): p is Pick => !!p);
+  } else base = chosen.flatMap((e) => e.questions.map((q) => ({ exam: e, q })));
+  const match: Record<Sel, (p: Pick) => boolean> = {
+    all: () => true,
+    marked: (p) => markedIds.has(p.q.id),
+    used: (p) => !!qs.get(p.q.id)?.used,
+    unused: (p) => !qs.get(p.q.id)?.used,
+    correct: (p) => qs.get(p.q.id)?.last === 'correct',
+    incorrect: (p) => {
+      const l = qs.get(p.q.id)?.last;
+      return l === 'incorrect' || l === 'omitted';
+    },
+    missed: (p) => missedIds.has(p.q.id),
+    custom: (p) => parseNumbers(custom).has(p.q.number),
+  };
+  const pool = bank ? base : base.filter(match[sel]);
   const presetCount = preset === 'standard' ? 40 : preset === 'shelf' ? 110 : null;
-  const wanted = sel === 'random' && !bank ? randomN : presetCount;
-  const count = Math.min(pool.length, wanted ?? pool.length);
+  const max = pool.length;
+  const count = Math.max(0, Math.min(max, presetCount ?? n ?? max));
   const nBlocks = preset === 'shelf' ? 4 : preset === 'standard' ? 1 : blocks;
   const sec = preset === 'custom' ? secPerQ : 90;
-  const plan = planBlocks(count, mode, sec, nBlocks, null, timed);
+  const plan = planBlocks(Math.max(1, count), mode, sec, nBlocks, null, timed);
   const totalMs = plan.reduce((s, b) => s + (b.limitMs ?? 0), 0);
   const unkeyed = pool.filter((p) => !p.q.answer).length;
+  const selLabel = { all: 'All', marked: 'Marked', used: 'Used', unused: 'Unused', correct: 'Correct', incorrect: 'Incorrect', missed: 'Missed', custom: 'Custom numbers' }[sel];
 
   const start = async () => {
     if (!count) return;
@@ -114,14 +183,11 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
       } catch {}
     }
     let picks = pool;
-    const takeRandom = (sel === 'random' && !bank) || (presetCount != null && pool.length > presetCount);
-    if (takeRandom) {
-      picks = shuffle(pool).slice(0, count);
-      if (order === 'sequential') picks.sort((a, b) => a.q.number - b.q.number);
+    if (count < pool.length) {
+      picks = order === 'random' ? shuffle(pool).slice(0, count) : pool.slice(0, count);
     }
     if (order === 'random') picks = shuffle(picks);
-    picks = picks.slice(0, count);
-    const nm = name.trim() || (bank ? `Missed questions quiz (${count})` : exam!.name);
+    const nm = name.trim() || (bank ? `Missed questions quiz (${count})` : chosen.length === 1 ? chosen[0].name : `${chosen.length} exams`);
     const a = createAttempt(
       nm,
       picks,
@@ -133,133 +199,217 @@ export function BlockSetup({ examId, preset: pick, bank }: { examId: string | nu
     go(`/test/${a.id}`);
   };
 
-  const R = (v: Sel, testId: string, children: React.ReactNode) => (
-    <label className="choice items-center" key={v}>
-      <input type="radio" name="sel" checked={sel === v} onChange={() => setSel(v)} data-testid={testId} /> {children}
+  const SelBtn = ({ v, label }: { v: Sel; label: string }) => (
+    <label className="relative flex-1 cursor-pointer py-2 text-center text-[14px] font-semibold" style={sel === v ? { background: 'var(--navy)', color: 'var(--bg)' } : { background: 'var(--surface-2)', color: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+      <input type="radio" name="sel" className="absolute inset-0 cursor-pointer opacity-0" checked={sel === v} onChange={() => setSel(v)} data-testid={`sel-${v}`} />
+      {label}
+      <span className="mono ml-1 text-[11px] opacity-70">{base.filter(match[v]).length}</span>
     </label>
   );
 
   return (
-    <div data-testid="block-setup">
-      <a className="link text-sm" href={bank ? '#/missed' : `#/exam/${examId}`}>← Back</a>
-      <div className="mt-3" />
-      <H1 sub={bank ? 'Quiz me on missed questions' : 'Choose questions, set the parameters, and begin.'}>Test Composer</H1>
-      <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
-      <div className="min-w-0">
-
-      {!bank && (
-        <Step n="I" title="Exam">
-          <select className="field w-full max-w-lg" value={exam!.id} onChange={(e) => go(`/setup?exam=${e.target.value}`, true)} data-testid="setup-exam">
-            {[...exams].sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true })).map((e) => (
-              <option key={e.id} value={e.id}>{e.subject ? `${e.subject} · ` : ''}{e.name}</option>
-            ))}
-          </select>
-        </Step>
-      )}
-      {!bank && (
-        <Step n="II" title="Question filters">
-          <div className="grid gap-2 text-sm sm:grid-cols-2">
-            {R('all', 'sel-all', <>All {exam!.questions.length} questions</>)}
-            {R('range', 'sel-range', <>
-              Range: from
-              <input className="field mx-1 w-16" type="number" min={1} max={exam!.questions.length} value={from} onChange={(e) => { setFrom(parseInt(e.target.value, 10) || 1); setSel('range'); }} data-testid="range-from" />
-              to
-              <input className="field mx-1 w-16" type="number" min={1} max={exam!.questions.length} value={to} onChange={(e) => { setTo(parseInt(e.target.value, 10) || 1); setSel('range'); }} data-testid="range-to" />
-            </>)}
-            {R('random', 'sel-random', <>
-              Random
-              <input className="field mx-1 w-16" type="number" min={1} max={exam!.questions.length} value={randomN} onChange={(e) => { setRandomN(Math.max(1, parseInt(e.target.value, 10) || 1)); setSel('random'); }} data-testid="random-n" />
-              questions
-            </>)}
-            {R('missed', 'sel-missed', <>Missed only ({exam!.questions.filter((q) => missedIds.has(q.id)).length})</>)}
-            {R('marked', 'sel-marked', <>Marked only ({exam!.questions.filter((q) => markedIds.has(q.id)).length})</>)}
-            {R('unused', 'sel-unused', <>Unused ({exam!.questions.filter((q) => !qs.get(q.id)?.used).length})</>)}
-            {R('used', 'sel-used', <>Used ({exam!.questions.filter((q) => qs.get(q.id)?.used).length})</>)}
-            {R('correct', 'sel-correct', <>Last answered correctly ({exam!.questions.filter((q) => qs.get(q.id)?.last === 'correct').length})</>)}
-            {R('incorrect', 'sel-incorrect', <>Last incorrect or omitted ({exam!.questions.filter((q) => { const l = qs.get(q.id)?.last; return l === 'incorrect' || l === 'omitted'; }).length})</>)}
-            {R('custom', 'sel-custom', <>
-              Question numbers
-              <input className="field mx-1 w-40" placeholder="e.g. 1-5, 9, 12" value={custom} onChange={(e) => { setCustom(e.target.value); setSel('custom'); }} data-testid="custom-numbers" />
-            </>)}
+    <div data-testid="block-setup" className="-mx-4 -mt-8 sm:-mx-8">
+      <div className="mb-10 flex flex-wrap items-start justify-between gap-3 border-b-2 p-6" style={{ borderColor: 'var(--line)' }}>
+        <div>
+          <h1 className="text-[24px] font-bold leading-8">Test Composer</h1>
+          <div className="text-[14px]" style={{ color: 'var(--ink-2)' }}>
+            {bank ? 'Quiz me on missed questions' : <>From: <b style={{ color: 'var(--ink)' }}>{chosen.length === 1 ? chosen[0].name : `${chosen.length} exams`}</b></>}
           </div>
-        </Step>
-      )}
-
-      <Step n={bank ? 'I' : 'III'} title="Parameters">
-      <label className="mb-4 block text-sm">
-        <span className="eyebrow mb-1 block">Test name</span>
-        <input className="field w-full max-w-lg" placeholder={bank ? 'Missed questions quiz' : exam!.name} value={name} onChange={(e) => setName(e.target.value)} data-testid="test-name" />
-      </label>
-      <div className="eyebrow mb-2">Order</div>
-      <div className="grid grid-cols-2 gap-2 text-sm sm:max-w-md">
-        <label className="choice items-center"><input type="radio" name="order" checked={order === 'sequential'} onChange={() => setOrder('sequential')} /> In order</label>
-        <label className="choice items-center"><input type="radio" name="order" checked={order === 'random'} onChange={() => setOrder('random')} data-testid="order-random" /> Shuffled</label>
+        </div>
+        <a className="link text-[14px]" href={bank ? '#/missed' : '#/'}>← Return to {bank ? 'Missed Questions' : 'Dashboard'}</a>
       </div>
 
-      <div className="eyebrow mb-2 mt-5">Mode</div>
-      <div className="grid gap-2 text-sm md:grid-cols-2">
-        <label className="choice"><input type="radio" name="mode" checked={!tutor} onChange={() => { setTutor(false); setTimed(true); }} data-testid="mode-exam" /> <span><b className="block">Test mode</b><span className="muted">Answers and explanations stay locked until the block ends, like the real exam.</span></span></label>
-        <label className="choice"><input type="radio" name="mode" checked={tutor} onChange={() => setTutor(true)} data-testid="mode-tutor" /> <span><b className="block">Tutor mode</b><span className="muted">See the correct answer and explanation after each question.</span></span></label>
-      </div>
-      <div className="mt-2 grid gap-2 text-sm md:grid-cols-2">
-        <label className="choice"><input type="radio" name="timed" checked={timed} onChange={() => setTimed(true)} data-testid="timed-on" /> <span><b className="block">Timed</b><span className="muted">A countdown for each block{!tutor ? '; opens full screen' : ''}.</span></span></label>
-        <label className="choice"><input type="radio" name="timed" checked={!timed} onChange={() => { setTimed(false); }} data-testid="mode-untimed" /> <span><b className="block">Untimed</b><span className="muted">No countdown; your time is still recorded.</span></span></label>
-      </div>
-      <p className="muted mt-2 text-xs">You can switch either one in the middle of a block: click the clock at the bottom of the test screen.</p>
+      <div className="mx-auto max-w-[960px] px-4 pb-16">
+        {!bank && (
+          <>
+            <Section n="I" title="Folder Selection" action={<button className="link text-[14px]" onClick={() => setDialog('folders')} data-testid="modify-folders">Modify Selection</button>}>
+              <div className="px-4">
+                <div className="mb-1 text-[16px] font-bold" style={{ fontFamily: "'Playfair Display', var(--serif)" }}>Selected Folders</div>
+                <div className="text-[14px] font-semibold" style={{ color: 'var(--brand)' }}>{folders.length === allFolders.length && allFolders.length > 1 ? 'All Folders' : folders.join(', ')}</div>
+              </div>
+            </Section>
+            <Section n="II" title="Exam Selection" action={<button className="link text-[14px]" onClick={() => setDialog('exams')} data-testid="modify-exams">Modify Selection</button>}>
+              <div className="px-4">
+                <div className="mb-1 text-[16px] font-bold" style={{ fontFamily: "'Playfair Display', var(--serif)" }}>Selected Exams</div>
+                <div className="text-[14px] font-semibold" style={{ color: 'var(--brand)' }} data-testid="selected-exams">{chosen.map((e) => e.name).join(', ')}</div>
+              </div>
+            </Section>
+            <Section n="III" title="Question Filters">
+              <div className="mb-3 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Status (Select One)</div>
+              <div className="flex flex-wrap gap-2">
+                <SelBtn v="all" label="All" />
+                <SelBtn v="marked" label="Marked" />
+                <SelBtn v="used" label="Used" />
+                <SelBtn v="unused" label="Unused" />
+                <SelBtn v="correct" label="Correct" />
+                <SelBtn v="incorrect" label="Incorrect" />
+                {(pick === 'missed' || sel === 'missed') && <SelBtn v="missed" label="Missed" />}
+              </div>
+              <div className="mt-5">
+                {showCustom || sel === 'custom' ? (
+                  <label className="flex flex-wrap items-center gap-2 text-[14px]">
+                    <input type="radio" name="sel" checked={sel === 'custom'} onChange={() => setSel('custom')} data-testid="sel-custom" />
+                    Question numbers
+                    <input className="field w-64" placeholder="e.g. 1-5, 9, 12" value={custom} onChange={(e) => { setCustom(e.target.value); setSel('custom'); }} data-testid="custom-numbers" />
+                  </label>
+                ) : (
+                  <button className="link text-[14px]" onClick={() => setShowCustom(true)} data-testid="show-custom">
+                    Specify custom question numbers
+                  </button>
+                )}
+              </div>
+            </Section>
+          </>
+        )}
 
-      <div className="eyebrow mb-2 mt-5">Length and timing</div>
-      <div className="space-y-2 text-sm">
-        <label className="choice flex-wrap items-center"><input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" /> <span><b>Custom</b>:</span>
-          <input className="field mx-1 w-16" type="number" min={10} max={3600} value={secPerQ} disabled={!timed} onChange={(e) => { setSecPerQ(Math.max(5, parseInt(e.target.value, 10) || DEFAULT_SEC_PER_Q)); setPreset('custom'); }} data-testid="sec-per-q" aria-label="Seconds per question" />
-          seconds per question, in
-          <input className="field mx-1 w-14" type="number" min={1} max={20} value={blocks} onChange={(e) => { setBlocks(Math.max(1, parseInt(e.target.value, 10) || 1)); setPreset('custom'); }} data-testid="block-count" aria-label="Number of blocks" />
-          block(s)
-        </label>
-        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'standard'} onChange={() => setPreset('standard')} data-testid="preset-standard" /> <span><b>40 questions / 60 minutes</b> (one block)</span></label>
-        <label className="choice items-center"><input type="radio" name="preset" checked={preset === 'shelf'} onChange={() => setPreset('shelf')} data-testid="preset-shelf" /> <span><b>Shelf-style</b>: 110 questions in 4 blocks, 2 h 45 min total, with a break screen between blocks</span></label>
-        {nBlocks > 1 && (
-          <label className="block pl-5">
-            Break timer (optional):
-            <input className="field mx-1 w-16" type="number" min={0} value={breakMin} onChange={(e) => setBreakMin(e.target.value)} placeholder="none" data-testid="break-min" /> minutes per break
+        <Section n={bank ? 'I' : 'IV'} title="Test Parameters">
+          <label className="mb-6 block">
+            <span className="mb-2 block text-[14px] font-semibold">Test Name (optional)</span>
+            <input className="field mono w-full" maxLength={100} placeholder="e.g., Cardiology Review Block 1" value={name} onChange={(e) => setName(e.target.value)} data-testid="test-name" />
+            <span className="mt-1 block text-[12px]" style={{ color: 'var(--ink-2)' }}>{name.length}/100 characters</span>
           </label>
-        )}
-      </div>
-      </Step>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="border p-6" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+              <div className="text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Number of Questions</div>
+              <div className="mb-4 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+                Max available based on selection: <b>{max}</b>
+              </div>
+              <div className="mb-6 flex items-center justify-center gap-4">
+                <button className="mono px-2 text-[24px] font-bold" style={{ color: 'var(--ink-2)' }} onClick={() => { setPreset('custom'); setN(Math.max(1, count - 1)); }} aria-label="Fewer questions" data-testid="count-minus">−</button>
+                <input className="field mono w-20 text-center text-[24px] font-bold" style={{ background: 'var(--surface)' }} type="number" min={1} max={max} value={count} onChange={(e) => { setPreset('custom'); setN(Math.max(1, parseInt(e.target.value, 10) || 1)); }} data-testid="count" aria-label="Number of questions" />
+                <button className="mono px-2 text-[24px] font-bold" style={{ color: 'var(--ink-2)' }} onClick={() => { setPreset('custom'); setN(Math.min(max, count + 1)); }} aria-label="More questions" data-testid="count-plus">+</button>
+              </div>
+              <div className="mb-2 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Order</div>
+              <div className="grid grid-cols-2 p-1" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+                {(['random', 'sequential'] as const).map((o) => (
+                  <label key={o} className="relative cursor-pointer py-2 text-center text-[14px] font-semibold" style={order === o ? { background: 'var(--navy)', color: 'var(--bg)' } : { color: 'var(--ink-2)' }}>
+                    <input type="radio" name="order" className="absolute inset-0 cursor-pointer opacity-0" checked={order === o} onChange={() => setOrder(o)} data-testid={`order-${o}`} />
+                    {o === 'random' ? 'Random' : 'Sequential'}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="border p-6" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+              <div className="mb-3 text-[18px] font-bold" style={{ fontFamily: 'var(--serif)' }}>Study Mode</div>
+              {(
+                [
+                  [true, 'mode-tutor', 'Tutor Mode', 'Receive immediate feedback after each question.'],
+                  [false, 'mode-exam', 'Test Mode', 'Answers and explanations stay hidden until the test ends.'],
+                ] as const
+              ).map(([t, id, l, d]) => (
+                <label key={id} className="mb-3 flex cursor-pointer items-start gap-3 border-2 p-3" style={{ borderColor: tutor === t ? 'var(--ink)' : 'var(--line)', background: 'var(--surface)' }}>
+                  <input type="radio" name="mode" className="mt-1" checked={tutor === t} onChange={() => { setTutor(t); if (!t) setTimed(true); }} data-testid={id} />
+                  <span>
+                    <b className="block text-[16px]">{l}</b>
+                    <span className="text-[14px]" style={{ color: 'var(--ink-2)' }}>{d}</span>
+                  </span>
+                </label>
+              ))}
+              <div className="mt-1 grid grid-cols-2 gap-2 text-[14px]">
+                {(
+                  [
+                    [true, 'timed-on', 'Timed', 'Countdown per block'],
+                    [false, 'mode-untimed', 'Untimed', 'Time is still recorded'],
+                  ] as const
+                ).map(([v, id, l, d]) => (
+                  <label key={id} className="flex cursor-pointer items-start gap-2 border-2 p-2.5" style={{ borderColor: timed === v ? 'var(--ink)' : 'var(--line)', background: 'var(--surface)' }}>
+                    <input type="radio" name="timed" className="mt-1" checked={timed === v} onChange={() => setTimed(v)} data-testid={id} />
+                    <span>
+                      <b className="block">{l}</b>
+                      <span className="text-[12px]" style={{ color: 'var(--ink-2)' }}>{d}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
 
+          <details className="mt-6 rounded-none border p-4 text-[14px]" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+            <summary className="cursor-pointer font-semibold">Timing and blocks</summary>
+            <div className="mt-3 space-y-2">
+              <label className="flex flex-wrap items-center gap-2">
+                <input type="radio" name="preset" checked={preset === 'custom'} onChange={() => setPreset('custom')} data-testid="preset-custom" />
+                <b>Custom:</b>
+                <input className="field w-20" type="number" min={10} max={3600} value={secPerQ} disabled={!timed} onChange={(e) => { setSecPerQ(Math.max(5, parseInt(e.target.value, 10) || DEFAULT_SEC_PER_Q)); setPreset('custom'); }} data-testid="sec-per-q" aria-label="Seconds per question" />
+                seconds per question, in
+                <input className="field w-16" type="number" min={1} max={20} value={blocks} onChange={(e) => { setBlocks(Math.max(1, parseInt(e.target.value, 10) || 1)); setPreset('custom'); }} data-testid="block-count" aria-label="Number of blocks" />
+                block(s)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="preset" checked={preset === 'standard'} onChange={() => setPreset('standard')} data-testid="preset-standard" /> <b>40 questions / 60 minutes</b> (one block)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="preset" checked={preset === 'shelf'} onChange={() => setPreset('shelf')} data-testid="preset-shelf" /> <b>Shelf-style</b>: 110 questions in 4 blocks, 2 h 45 min, with breaks
+              </label>
+              {nBlocks > 1 && (
+                <label className="flex items-center gap-2 pl-6">
+                  Break timer (optional):
+                  <input className="field w-20" type="number" min={0} value={breakMin} onChange={(e) => setBreakMin(e.target.value)} placeholder="none" data-testid="break-min" /> minutes per break
+                </label>
+              )}
+              <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>You can switch tutor/test and timed/untimed in the middle of a test: click the clock on the test screen.</p>
+            </div>
+          </details>
+        </Section>
+
+        <section className="border-2 p-8 text-center" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+          <h2 className="mb-1 text-[24px] font-bold">Examination Dossier</h2>
+          <p className="mb-5 text-[16px]" style={{ color: 'var(--ink-2)' }}>Please verify the parameters below before commencing the test.</p>
+          <div className="mx-auto mb-6 max-w-[620px] border-y py-4" style={{ borderColor: 'var(--line)' }}>
+            <div className="mono mb-2 text-[16px]" data-testid="setup-summary">
+              {bank ? 'Missed questions' : chosen.length === 1 ? chosen[0].name : `${chosen.length} exams`} • {folders.length === 1 ? folders[0] : `${folders.length} folders`} • <b>{count}</b> question{count === 1 ? '' : 's'}
+              {plan.length > 1 && <> in <b>{plan.length}</b> blocks ({plan.map((b) => b.count).join(' + ')})</>}
+            </div>
+            <div className="mono text-[12px]" style={{ color: 'var(--ink-2)' }}>
+              Mode: <b style={{ color: 'var(--ink)' }}>{tutor ? 'Tutor' : 'Test'}</b> · {timed ? <>Timed{totalMs > 0 && <> (<b style={{ color: 'var(--ink)' }}>{fmtDuration(totalMs)}</b>)</>}</> : 'Untimed'} · Order: <b style={{ color: 'var(--ink)' }}>{order === 'random' ? 'Random' : 'Sequential'}</b>
+              {!bank && <> · Filters: <b style={{ color: 'var(--ink)' }}>{selLabel}</b></>}
+            </div>
+            {presetCount != null && pool.length < presetCount && <div className="mt-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>(only {pool.length} available, so the time is scaled to match)</div>}
+            {unkeyed > 0 && <div className="mt-2 text-[13px]" style={{ color: 'var(--bad)' }}>{unkeyed} of these questions have no answer in the key and cannot be graded.</div>}
+          </div>
+          <button className="btn-primary btn-caps w-full max-w-[448px] py-4 text-[18px]" style={{ fontSize: 18, letterSpacing: '0.9px', padding: '16px 32px' }} disabled={!count || busy} onClick={start} data-testid="start-block">
+            Begin Test
+          </button>
+          {!count && (
+            <span className="mt-3 block text-[14px]" style={{ color: 'var(--bad)' }}>
+              {bank ? (
+                <>
+                  No questions chosen. Open <a className="link" href="#/missed">Missed Questions</a>, filter the list, and click “Quiz me on these”.
+                </>
+              ) : (
+                'No questions match this selection.'
+              )}
+            </span>
+          )}
+        </section>
       </div>
-      <aside className="card accent-top sticky top-24 p-6">
-      <h2 className="mb-3 flex items-baseline gap-3 text-[18px] font-bold"><span className="mono text-[13px]" style={{ color: 'var(--brand)' }}>{bank ? 'II' : 'IV'}.</span>Examination dossier</h2>
-      <dl className="mono mb-4 space-y-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
-        <div className="flex justify-between gap-2"><dt>Exam</dt><dd className="truncate text-right">{bank ? 'Missed questions' : exam!.name}</dd></div>
-        <div className="flex justify-between gap-2"><dt>Mode</dt><dd>{tutor ? 'Tutor' : 'Test'} · {timed ? 'Timed' : 'Untimed'}</dd></div>
-        <div className="flex justify-between gap-2"><dt>Order</dt><dd>{order === 'random' ? 'Random' : 'Sequential'}</dd></div>
-      </dl>
-      <div className="text-sm" data-testid="setup-summary">
-        <b>{count}</b> question{count === 1 ? '' : 's'}
-        {plan.length > 1 && <> in <b>{plan.length}</b> blocks ({plan.map((b) => b.count).join(' + ')})</>}
-        {timed && totalMs > 0 && <> · <b>{fmtDuration(totalMs)}</b> total</>}
-        {presetCount != null && pool.length < presetCount && <span className="ml-2 text-gray-700">(only {pool.length} available, so the time is scaled to match)</span>}
-        {presetCount != null && pool.length > presetCount && <span className="ml-2 text-gray-700">({presetCount} picked at random from {pool.length})</span>}
-        {unkeyed > 0 && <div className="mt-1 text-red-700">{unkeyed} of these questions have no answer in the key and cannot be graded.</div>}
-      </div>
-      <div className="mt-4">
-        <button className="btn-primary w-full px-6 py-2.5 text-base" disabled={!count || busy} onClick={start} data-testid="start-block">
-          Begin test →
-        </button>
-        {!count && (
-          <span className="mt-2 block text-sm text-red-700">
-            {bank ? (
-              <>
-                No questions chosen. Open <a className="link" href="#/missed">Missed Questions</a>, filter the list, and click “Quiz me on these”.
-              </>
-            ) : (
-              'No questions match this selection.'
-            )}
-          </span>
-        )}
-      </div>
-      </aside>
-      </div>
+
+      {dialog === 'folders' && (
+        <PickDialog
+          title="Select Folders"
+          groups={allFolders.map((f) => ({ id: f, label: f, items: exams.filter((e) => folderOf(e) === f).map((e) => ({ id: e.id, label: e.name })) }))}
+          chosen={new Set(folders)}
+          onClose={() => setDialog(null)}
+          onDone={(s) => {
+            const ids = exams.filter((e) => s.has(folderOf(e)) && !e.isDemo).map((e) => e.id);
+            const keep = chosenIds.filter((id) => s.has(folderOf(exams.find((e) => e.id === id)!)));
+            setExtraExams(keep.length ? [...new Set([...keep, ...ids])] : ids.length ? ids : exams.filter((e) => s.has(folderOf(e))).map((e) => e.id));
+            setDialog(null);
+          }}
+        />
+      )}
+      {dialog === 'exams' && (
+        <PickDialog
+          title="Select Exams"
+          groups={[...exams].sort((x, y) => folderOf(x).localeCompare(folderOf(y)) || x.name.localeCompare(y.name, undefined, { numeric: true })).map((e) => ({ id: e.id, label: `${folderOf(e)} · ${e.name}` }))}
+          chosen={new Set(chosenIds)}
+          onClose={() => setDialog(null)}
+          onDone={(s) => {
+            setExtraExams([...s]);
+            setDialog(null);
+          }}
+        />
+      )}
     </div>
   );
 }

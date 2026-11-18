@@ -105,6 +105,16 @@ export function DisplaySettings() {
               { v: 'board', label: 'Board-style', aria: 'Board-style layout' },
             ]}
           />
+          <span className="text-[14px] text-gray-700">Split</span>
+          <Seg
+            value={d.split ?? 'side'}
+            testId="split"
+            onChange={(v) => set({ split: v })}
+            options={[
+              { v: 'side', label: <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="1.5" /><path d="M8 1v12" /></svg>, aria: 'Explanation beside the question' },
+              { v: 'below', label: <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="1.5" /><path d="M1 7h14" /></svg>, aria: 'Explanation below the question' },
+            ]}
+          />
         </div>
       </Section>
       <Section icon={PEN} title="HIGHLIGHTING">
